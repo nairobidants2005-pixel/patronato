@@ -6,45 +6,59 @@
     body {
       font-family: Arial;
       text-align: center;
-      background: #0f172a;
+      background: linear-gradient(135deg, #0f172a, #020617);
       color: #fff;
     }
 
+    h1 {
+      margin-top: 40px;
+    }
+
     button {
-      padding: 10px 20px;
+      padding: 12px 25px;
       font-size: 18px;
       margin-top: 20px;
+      border: none;
+      border-radius: 10px;
+      background: #22c55e;
+      color: white;
       cursor: pointer;
     }
 
     #resultado {
-      font-size: 30px;
+      font-size: 28px;
       margin-top: 30px;
+      background: #111827;
+      display: inline-block;
+      padding: 20px;
+      border-radius: 15px;
     }
   </style>
 </head>
 
 <body>
 
-<h1>📊 Sinais Binários</h1>
+<h1>📊 Sinais Binários PRO</h1>
 <p>EUR/USD | EUR/JPY | GBP/USD | GBP/JPY</p>
 
 <button onclick="gerarSinal()">Gerar Sinal</button>
 
-<div id="resultado"></div>
+<div id="resultado">Aguardando sinal...</div>
 
 <script>
 function gerarSinal() {
     let pares = ["EUR/USD", "EUR/JPY", "GBP/USD", "GBP/JPY"];
     let tempos = ["M1", "M5"];
-    let direcao = ["CALL (COMPRA)", "PUT (VENDA)"];
+    let direcao = ["CALL 📈", "PUT 📉"];
 
     let par = pares[Math.floor(Math.random() * pares.length)];
     let tempo = tempos[Math.floor(Math.random() * tempos.length)];
     let sinal = direcao[Math.floor(Math.random() * direcao.length)];
 
     document.getElementById("resultado").innerHTML =
-        par + "<br>" + tempo + "<br>" + sinal;
+        "Par: " + par + "<br>" +
+        "Tempo: " + tempo + "<br><br>" +
+        "<strong>" + sinal + "</strong>";
 }
 </script>
 
