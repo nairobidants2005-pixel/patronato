@@ -1,66 +1,36 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Sinais Binários</title>
-  <style>
-    body {
-      font-family: Arial;
-      text-align: center;
-      background: linear-gradient(135deg, #0f172a, #020617);
-      color: #fff;
-    }
-
-    h1 {
-      margin-top: 40px;
-    }
-
-    button {
-      padding: 12px 25px;
-      font-size: 18px;
-      margin-top: 20px;
-      border: none;
-      border-radius: 10px;
-      background: #22c55e;
-      color: white;
-      cursor: pointer;
-    }
-
-    #resultado {
-      font-size: 28px;
-      margin-top: 30px;
-      background: #111827;
-      display: inline-block;
-      padding: 20px;
-      border-radius: 15px;
-    }
-  </style>
-</head>
-
-<body>
-
-<h1>📊 Sinais Binários PRO</h1>
-<p>EUR/USD | EUR/JPY | GBP/USD | GBP/JPY</p>
-
-<button onclick="gerarSinal()">Gerar Sinal</button>
-
-<div id="resultado">Aguardando sinal...</div>
+<h1 id="par"></h1>
+<h2 id="direcao"></h2>
+<h3 id="horario"></h3>
 
 <script>
-function gerarSinal() {
-    let pares = ["EUR/USD", "EUR/JPY", "GBP/USD", "GBP/JPY"];
-    let tempos = ["M1", "M5"];
-    let direcao = ["CALL 📈", "PUT 📉"];
+const API_KEY = "SUA_API_KEY";
 
-    let par = pares[Math.floor(Math.random() * pares.length)];
-    let tempo = tempos[Math.floor(Math.random() * tempos.length)];
-    let sinal = direcao[Math.floor(Math.random() * direcao.length)];
+async function gerarSinal() {
+  const url = `https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1min&apikey=${API_KEY}`;
 
-    document.getElementById("resultado").innerHTML =
-        "Par: " + par + "<br>" +
-        "Tempo: " + tempo + "<br><br>" +
-        "<strong>" + sinal + "</strong>";
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (!data.values) return;
+
+  const candles = data.values;
+
+  const ultimo = candles[0];
+  const anterior = candles[1];
+
+  let sinal = "";
+
+  if (parseFloat(ultimo.close) > parseFloat(anterior.close)) {
+    sinal = "CALL";
+  } else {
+    sinal = "PUT";
+  }
+
+  document.getElementById("par").innerText = "EUR/USD";
+  document.getElementById("direcao").innerText = sinal;
+  document.getElementById("horario").innerText = new Date().toLocaleTimeString();
 }
-</script>
 
-</body>
-</html>
+gerarSinal();
+setInterval(gerarSinal, 60000);
+</script>
