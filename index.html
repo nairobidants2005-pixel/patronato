@@ -12,6 +12,10 @@ body {
   text-align: center;
 }
 
+h1 {
+  margin: 20px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -34,7 +38,7 @@ body {
 .put { color: #ff3b3b; }
 
 .timer {
-  font-size: 20px;
+  font-size: 22px;
   margin-top: 10px;
 }
 </style>
@@ -49,40 +53,43 @@ body {
   <div class="card">
     <h3>EUR/USD M1</h3>
     <div id="eurusd_m1" class="sinal">...</div>
-    <div id="timer_eurusd_m1" class="timer">60</div>
+    <div id="timer_eurusd_m1" class="timer"></div>
   </div>
 
   <div class="card">
     <h3>EUR/USD M5</h3>
     <div id="eurusd_m5" class="sinal">...</div>
-    <div id="timer_eurusd_m5" class="timer">300</div>
+    <div id="timer_eurusd_m5" class="timer"></div>
   </div>
 
   <div class="card">
     <h3>GBP/USD M1</h3>
     <div id="gbpusd_m1" class="sinal">...</div>
-    <div id="timer_gbpusd_m1" class="timer">60</div>
+    <div id="timer_gbpusd_m1" class="timer"></div>
   </div>
 
   <div class="card">
     <h3>GBP/USD M5</h3>
     <div id="gbpusd_m5" class="sinal">...</div>
-    <div id="timer_gbpusd_m5" class="timer">300</div>
+    <div id="timer_gbpusd_m5" class="timer"></div>
   </div>
 
 </div>
 
 <script>
-const API_KEY = "b7a8442395824a299190dc6f20845d6a";
+const API_KEY = "SUA_API_KEY";
 
-// 🔔 som simples
+// 🔔 som
 function tocarSom() {
   const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
   audio.play();
 }
 
-// função de sinal
-async function gerar(par, tempo, elemento) {
+// salvar último sinal pra evitar repetir som
+let ultimos = {};
+
+// gerar sinal
+async function gerar(par, tempo, elemento, key) {
   const url = `https://api.twelvedata.com/time_series?symbol=${par}&interval=${tempo}&apikey=${API_KEY}`;
 
   const response = await fetch(url);
@@ -103,45 +110,53 @@ async function gerar(par, tempo, elemento) {
     elemento.className = "sinal put";
   }
 
-  elemento.innerText = sinal;
+  // 🔔 só toca se mudar
+  if (ultimos[key] !== sinal) {
+    tocarSom();
+    ultimos[key] = sinal;
+  }
 
-  // 🔔 toca som sempre que atualiza
-  tocarSom();
+  elemento.innerText = sinal;
 }
 
-// contadores individuais
-let timers = {
-  eurusd_m1: 60,
-  eurusd_m5: 300,
-  gbpusd_m1: 60,
-  gbpusd_m5: 300
-};
+// ⏱️ CONTADOR REAL (SINCRONIZADO)
+function atualizarContadorReal() {
+  const agora = new Date();
 
-function atualizarContadores() {
-  for (let key in timers) {
-    timers[key]--;
+  const segundos = agora.getSeconds();
+  const minutos = agora.getMinutes();
 
-    document.getElementById("timer_" + key).innerText = timers[key];
+  const restanteM1 = 60 - segundos;
 
-    if (timers[key] <= 0) {
-      timers[key] = key.includes("m5") ? 300 : 60;
+  const restoMin = minutos % 5;
+  const restanteM5 = (5 - restoMin) * 60 - segundos;
 
-      if (key === "eurusd_m1") gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"));
-      if (key === "eurusd_m5") gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"));
-      if (key === "gbpusd_m1") gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"));
-      if (key === "gbpusd_m5") gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"));
-    }
+  document.getElementById("timer_eurusd_m1").innerText = restanteM1 + "s";
+  document.getElementById("timer_gbpusd_m1").innerText = restanteM1 + "s";
+
+  document.getElementById("timer_eurusd_m5").innerText = restanteM5 + "s";
+  document.getElementById("timer_gbpusd_m5").innerText = restanteM5 + "s";
+
+  // ⏱️ quando zerar → gera novo sinal
+  if (restanteM1 === 60) {
+    gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
+    gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
+  }
+
+  if (restanteM5 === 300) {
+    gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"), "eurusd_m5");
+    gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"), "gbpusd_m5");
   }
 }
 
-// roda tudo
-setInterval(atualizarContadores, 1000);
+// rodar
+setInterval(atualizarContadorReal, 1000);
 
-// primeira carga
-gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"));
-gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"));
-gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"));
-gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"));
+// primeira execução
+gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
+gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"), "eurusd_m5");
+gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
+gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"), "gbpusd_m5");
 </script>
 
 </body>
