@@ -1,9 +1,81 @@
-<h1 id="par"></h1>
-<h2 id="direcao"></h2>
-<h3 id="horario"></h3>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Sala de Sinais Forex</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 20px;
+      font-size: 28px;
+    }
+
+    .card {
+      background: #1e293b;
+      margin: 50px auto;
+      padding: 30px;
+      width: 300px;
+      border-radius: 15px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    .par {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+
+    .direcao {
+      font-size: 40px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+
+    .call {
+      color: #00ff88;
+    }
+
+    .put {
+      color: #ff3b3b;
+    }
+
+    .tempo {
+      font-size: 18px;
+      opacity: 0.8;
+    }
+
+    .contador {
+      font-size: 30px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>🔥 Sala de Sinais Forex</h1>
+
+  <div class="card">
+    <div class="par" id="par">EUR/USD</div>
+
+    <div id="direcao" class="direcao">...</div>
+
+    <div class="tempo" id="horario"></div>
+
+    <div class="contador" id="contador">60</div>
+  </div>
 
 <script>
 const API_KEY = "SUA_API_KEY";
+
+let tempo = 60;
 
 async function gerarSinal() {
   const url = `https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=1min&apikey=${API_KEY}`;
@@ -22,15 +94,30 @@ async function gerarSinal() {
 
   if (parseFloat(ultimo.close) > parseFloat(anterior.close)) {
     sinal = "CALL";
+    document.getElementById("direcao").className = "direcao call";
   } else {
     sinal = "PUT";
+    document.getElementById("direcao").className = "direcao put";
   }
 
-  document.getElementById("par").innerText = "EUR/USD";
   document.getElementById("direcao").innerText = sinal;
-  document.getElementById("horario").innerText = new Date().toLocaleTimeString();
+  document.getElementById("horario").innerText = "Atualizado: " + new Date().toLocaleTimeString();
+
+  tempo = 60;
 }
 
+// contador regressivo
+setInterval(() => {
+  tempo--;
+  document.getElementById("contador").innerText = tempo;
+
+  if (tempo <= 0) {
+    gerarSinal();
+  }
+}, 1000);
+
 gerarSinal();
-setInterval(gerarSinal, 60000);
 </script>
+
+</body>
+</html>
