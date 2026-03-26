@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais Inteligente - Multi-Ativos / Multi-Timeframe</title>
+<title>Sala de Sinais Inteligente - Sinais Rápidos</title>
 <style>
 body { background:#0f172a; color:white; font-family:Arial, sans-serif; text-align:center; }
 h1 { margin:20px; }
@@ -21,25 +21,26 @@ h1 { margin:20px; }
 </head>
 <body>
 
-<h1>🔥 Sala de Sinais Inteligente - Multi-Ativos / Multi-Timeframe</h1>
+<h1>🔥 Sala de Sinais Inteligente - Sinais Rápidos</h1>
 
 <div id="cards-container"></div>
 
 <script>
 const API_KEY = "b7a8442395824a299190dc6f20845d6a"; // sua chave
-const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";       // coloque o token do bot
-const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";      // coloque seu chat_id
-const tempos = ["30s","1min"];
+const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";       // token do bot
+const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";      // seu chat id
+const tempos = ["30s"];  // sinal rápido
 const ativos = ["EUR/USD","GBP/USD","USD/JPY"];
 const intervaloAtualizacao = 15000; // 15s
 const melhorSinais = {};
 
+// Som de alerta
 function tocarSom(){
     const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
     audio.play();
 }
 
-// Função para enviar Telegram
+// Enviar sinal para Telegram
 function enviarTelegram(mensagem){
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{
         method:"POST",
@@ -77,7 +78,6 @@ function combinarIndicadores(closes,candles){
 function proximoCandle(tempo){
     const agora=new Date();
     let minutos=agora.getMinutes();
-    if(tempo==="1min") minutos+=1;
     if(tempo==="30s") minutos+=0.5; // aproximado
     const entrada=new Date(agora); entrada.setMinutes(Math.floor(minutos)); entrada.setSeconds(0); entrada.setMilliseconds(0);
     return entrada;
@@ -95,7 +95,7 @@ function criarCards(){
             ${tempos.map(t=>`<div id="${ativo.replace("/","")}_${t}" class="sinal">...</div>`).join("")}
             <button class="btn" onclick="gerarSinais('${ativo}')">Atualizar Sinais</button>
             <div id="info_${ativo.replace("/","")}" class="signal-info"></div>
-            <div id="melhor_${ativo.replace("/","")}" class="best">Melhor sinal sincronizado: ...</div>
+            <div id="melhor_${ativo.replace("/","")}" class="best">Melhor sinal: ...</div>
             <div id="timer_${ativo.replace("/","")}" class="signal-info"></div>
             <div id="history_${ativo.replace("/","")}" class="history"></div>
         `;
@@ -124,19 +124,17 @@ async function gerarSinais(ativo){
     }
     document.getElementById(`info_${idPrefix}`).innerText = infoText;
 
-    // Sinal sincronizado
-    if(sinaisTF.length===tempos.length && sinaisTF.every(v=>v===sinaisTF[0])){
-        const melhor=sinais[0]; melhorSinais[ativo]=melhor;
-        document.getElementById(`melhor_${idPrefix}`).innerText=
-        `Melhor sinal sincronizado: ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiabilidade ${melhor.confianca}/6)`;
+    // Sempre pega primeiro sinal como "melhor"
+    if(sinais.length>0){
+        const melhor = sinais[0];
+        melhorSinais[ativo] = melhor;
+        document.getElementById(`melhor_${idPrefix}`).innerText =
+            `Sinal rápido: ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiança ${melhor.confianca}/6)`;
         tocarSom();
         enviarTelegram(`💹 ${ativo} → ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiança ${melhor.confianca}/6)`);
         const hist=document.getElementById(`history_${idPrefix}`);
         const span=document.createElement("span"); span.className=melhor.sinal.toLowerCase();
         span.innerText=`${new Date().toLocaleTimeString()} → ${melhor.sinal} (${melhor.tempo})\n`; hist.prepend(span);
-    } else {
-        document.getElementById(`melhor_${idPrefix}`).innerText="Sem consenso entre os timeframes";
-        melhorSinais[ativo]=null;
     }
 }
 
@@ -155,7 +153,8 @@ function atualizarTimers(){
 }
 
 // Inicialização
-criarCards(); ativos.forEach(a=>gerarSinais(a));
+criarCards();
+ativos.forEach(a=>gerarSinais(a));
 setInterval(()=>{ ativos.forEach(a=>gerarSinais(a)); }, intervaloAtualizacao);
 setInterval(atualizarTimers,1000);
 
