@@ -1,136 +1,148 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<title>Sala de Sinais Forex 1min</title>
-<style>
-body { background:#0f172a; color:white; font-family:Arial, sans-serif; text-align:center; }
-h1 { margin:20px; }
-.card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; max-width:450px; }
-.sinal { font-size:24px; margin:10px 0; }
-.call { color:#00ff88; }
-.put { color:#ff3b3b; }
-.signal-info { font-size:14px; margin-top:10px; line-height:1.4; white-space:pre-line; }
-.history { text-align:left; font-size:12px; margin-top:10px; max-height:120px; overflow-y:auto; background:#111827; padding:5px; border-radius:8px; }
-.history span.call { color:#00ff88; }
-.history span.put { color:#ff3b3b; }
-.best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
-.btn { margin-top:10px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
-.btn:hover { opacity:0.8; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Profissional Forex</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      background-color: #f4f4f9; 
+      margin: 0; 
+      padding: 20px; 
+      color: #333;
+    }
+    h1 { 
+      text-align: center; 
+      color: #2c3e50; 
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .input-group {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+      gap: 10px;
+    }
+    input {
+      padding: 8px;
+      width: 150px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 1em;
+      text-transform: uppercase;
+    }
+    button {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 5px;
+      background-color: #3498db;
+      color: white;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    #dashboard {
+      text-align: center;
+      font-size: 1.3em;
+      font-weight: bold;
+      margin-bottom: 25px;
+    }
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-bottom: 30px;
+    }
+    canvas {
+      background: #f9f9f9;
+      border-radius: 10px;
+      padding: 10px;
+    }
+  </style>
 </head>
 <body>
+  <h1>Dashboard Profissional de Sinais Forex</h1>
+  <div class="container">
+    <div class="input-group">
+      <input type="text" id="symbol" placeholder="Ex: EURUSD" value="EURUSD">
+      <button onclick="getSignal()">Obter Sinal</button>
+    </div>
+    <div id="dashboard">O sinal aparecerá aqui.</div>
 
-<h1>🔥 Sala de Sinais Forex 1min</h1>
-<div id="cards-container"></div>
+    <div class="chart-container">
+      <canvas id="priceChart"></canvas>
+    </div>
+    <div class="chart-container">
+      <canvas id="indicatorChart"></canvas>
+    </div>
+  </div>
 
-<script>
-const API_KEY = "eae002348977479ba4a89110fba6c274"; // Troque pela sua chave real
-const ativos = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","NZD/USD","EUR/GBP","EUR/JPY"];
-const melhorSinais = {};
+  <script>
+    let priceChart, indicatorChart;
 
-// Função de alerta sonoro
-function tocarSom(){
-    const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
-    audio.play();
-}
+    async function getSignal() {
+      const symbol = document.getElementById('symbol').value.toUpperCase();
+      const dashboard = document.getElementById('dashboard');
+      
+      try {
+        // Requisição de sinal
+        const resSignal = await fetch(`http://localhost:8000/signal?symbol=${symbol}`);
+        const dataSignal = await resSignal.json();
 
-// SMA simples
-function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
+        // Atualiza dashboard com cores
+        dashboard.innerHTML = `Par: ${dataSignal.symbol} | Sinal: ${dataSignal.signal}`;
+        dashboard.style.color = dataSignal.signal === "CALL" ? "#27ae60" : "#e74c3c";
 
-// RSI simples
-function rsi(values, period=14){
-    if(values.length < period+1) return 50;
-    let gains=0, losses=0;
-    for(let i=1;i<=period;i++){
-        const d = values[i]-values[i-1];
-        if(d>0) gains+=d;
-        else losses-=d;
-    }
-    if(gains+losses===0) return 50;
-    return 100-(100/(1+gains/losses));
-}
+        // Requisição dos dados históricos (CSV convertido para JSON no backend)
+        const resData = await fetch(`http://localhost:8000/data?symbol=${symbol}`);
+        const data = await resData.json(); // espera: {labels: [], close: [], sma: [], ema: [], rsi: []}
 
-// Tendência simples
-function analisarTendencia(closes){
-    const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3];
-    if(c0>c1 && c1>c2) return "CALL";
-    if(c0<c1 && c1<c2) return "PUT";
-    return c0>c1?"CALL":"PUT";
-}
+        // Atualiza gráfico de preços
+        const priceCtx = document.getElementById('priceChart').getContext('2d');
+        if (priceChart) priceChart.destroy();
+        priceChart = new Chart(priceCtx, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: [
+              { label: 'Preço Close', data: data.close, borderColor: '#2980b9', fill: false },
+              { label: 'SMA', data: data.sma, borderColor: '#f39c12', fill: false },
+              { label: 'EMA', data: data.ema, borderColor: '#8e44ad', fill: false },
+            ]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'top' } } }
+        });
 
-// Combinar indicadores simples
-function combinarIndicadores(closes){
-    const tend = analisarTendencia(closes);
-    const media = sma(closes);
-    const r = rsi(closes);
-    let score = 0;
-    score += (tend==="CALL")?1:-1;
-    score += (closes[closes.length-1]>media)?1:-1;
-    const sinalFinal = score>=0?"CALL":"PUT";
-    return { sinal:sinalFinal, media:media.toFixed(4), rsi:r.toFixed(2), confianca:Math.min(Math.abs(score),2) };
-}
+        // Atualiza gráfico de indicadores
+        const indicatorCtx = document.getElementById('indicatorChart').getContext('2d');
+        if (indicatorChart) indicatorChart.destroy();
+        indicatorChart = new Chart(indicatorCtx, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: [
+              { label: 'RSI', data: data.rsi, borderColor: '#27ae60', fill: false },
+              { label: 'MACD', data: data.macd, borderColor: '#c0392b', fill: false },
+            ]
+          },
+          options: { responsive: true, plugins: { legend: { position: 'top' } } }
+        });
 
-// Criar cards
-function criarCards(){
-    const container=document.getElementById("cards-container");
-    container.innerHTML="";
-    ativos.forEach(ativo=>{
-        const idPrefix=ativo.replace("/","");
-        const card=document.createElement("div");
-        card.className="card";
-        card.id=`card_${idPrefix}`;
-        card.innerHTML=`
-            <h3>${ativo}</h3>
-            <div id="${idPrefix}_1min" class="sinal">---</div>
-            <button class="btn" onclick="gerarSinal('${ativo}')">Gerar Sinal</button>
-            <div id="melhor_${idPrefix}" class="best">Sinal: ---</div>
-            <div id="history_${idPrefix}" class="history"></div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-// Gerar sinal manual
-async function gerarSinal(ativo){
-    const idPrefix=ativo.replace("/","");
-    try{
-        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=20&apikey=${API_KEY}`;
-        const res=await fetch(url);
-        const data=await res.json();
-        if(!data.values || data.values.length<3){
-            alert("Dados insuficientes para gerar sinal.");
-            return;
-        }
-        const closes = data.values.map(c=>parseFloat(c.close)).reverse();
-        const ind = combinarIndicadores(closes);
-
-        // Atualiza card
-        const elem=document.getElementById(`${idPrefix}_1min`);
-        elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
-        elem.innerText=`${ind.sinal} (1min)`;
-
-        // Histórico e melhor sinal
-        const melhor = melhorSinais[ativo];
-        if(!melhor || melhor.sinal !== ind.sinal){
-            tocarSom();
-        }
-        melhorSinais[ativo] = {...ind,tempo:"1min",entrada:new Date()};
-
-        const hist=document.getElementById(`history_${idPrefix}`);
-        const span=document.createElement("span"); span.className=ind.sinal.toLowerCase();
-        span.innerText=`${new Date().toLocaleTimeString()} → ${ind.sinal}\n`; hist.prepend(span);
-
-        document.getElementById(`melhor_${idPrefix}`).innerText=`Sinal: ${ind.sinal}`;
-    }catch(err){
+      } catch (err) {
         console.error(err);
-        alert("Erro ao buscar dados. Verifique sua API Key.");
+        dashboard.innerHTML = 'Erro ao obter sinais ou dados. Verifique o backend.';
+        dashboard.style.color = '#e74c3c';
+      }
     }
-}
-
-// Inicialização
-criarCards();
-</script>
-
+  </script>
 </body>
 </html>
