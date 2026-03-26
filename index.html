@@ -2,18 +2,18 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais EUR/USD Inteligente - Sincronizado</title>
+<title>Sala de Sinais EUR/USD Inteligente - Máxima Precisão</title>
 <style>
-  body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
-  h1 { margin:20px; }
-  .card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; width:350px; }
-  .sinal { font-size:28px; margin:10px 0; }
-  .call { color:#00ff88; }
-  .put { color:#ff3b3b; }
-  .btn { margin-top:15px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
-  .btn:hover { opacity:0.8; }
-  .signal-info { font-size:16px; margin-top:10px; line-height:1.4; white-space:pre-line; }
-  .best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
+body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
+h1 { margin:20px; }
+.card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; width:380px; }
+.sinal { font-size:28px; margin:10px 0; }
+.call { color:#00ff88; }
+.put { color:#ff3b3b; }
+.btn { margin-top:15px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
+.btn:hover { opacity:0.8; }
+.signal-info { font-size:16px; margin-top:10px; line-height:1.4; white-space:pre-line; }
+.best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
 </style>
 </head>
 <body>
@@ -37,95 +37,143 @@ const tempos = ["1min","5min","15min"];
 const ids = ["eurusd_m1","eurusd_m5","eurusd_m15"];
 let melhorSinalAtual = null;
 
-// 🔔 Som
-function tocarSom(){ const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3"); audio.play(); }
+// 🔔 Som de alerta
+function tocarSom(){
+  const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
+  audio.play();
+}
 
-// Indicadores
+// SMA
 function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
-function rsi(values){
+
+// EMA
+function ema(values, period){
+  const k = 2/(period+1);
+  let emaPrev = values[0];
+  for(let i=1;i<values.length;i++){ emaPrev = values[i]*k + emaPrev*(1-k); }
+  return emaPrev;
+}
+
+// RSI clássico
+function rsi(values, period=14){
+  if(values.length < period+1) return 50;
   let gains=0, losses=0;
-  for(let i=1;i<values.length;i++){
-    const diff=values[i]-values[i-1];
+  for(let i=1;i<=period;i++){
+    const diff = values[i]-values[i-1];
     if(diff>0) gains+=diff; else losses-=diff;
   }
   if(gains+losses===0) return 50;
   return 100-(100/(1+gains/losses));
 }
-function macd(values,fast=3,slow=6){
+
+// MACD
+function macd(values, fast=12, slow=26){
   if(values.length<slow) return 0;
-  return sma(values.slice(0,fast))-sma(values.slice(0,slow));
+  return ema(values.slice(-fast), fast)-ema(values.slice(-slow), slow);
 }
+
+// Bollinger Bands
+function bollinger(values, period=20, desv=2){
+  if(values.length<period) return {upper:0, lower:0, middle:0};
+  const subset = values.slice(-period);
+  const m = sma(subset);
+  const std = Math.sqrt(subset.reduce((acc,v)=>acc+(v-m)**2,0)/period);
+  return {middle:m, upper:m+desv*std, lower:m-desv*std};
+}
+
+// ADX
+function adx(values, period=14){
+  if(values.length<period+1) return 0;
+  let trs=0, plusDM=0, minusDM=0;
+  for(let i=1;i<=period;i++){
+    const high = values[i]; const low = values[i]; const prev = values[i-1];
+    const up = high-prev>prev-low?Math.max(high-prev,0):0;
+    const down = prev-low>high-prev?Math.max(prev-low,0):0;
+    plusDM += up; minusDM += down;
+    trs += Math.abs(high-prev);
+  }
+  const plusDI = 100*(plusDM/trs); const minusDI = 100*(minusDM/trs);
+  return Math.abs(plusDI-minusDI)/(plusDI+minusDI)*100;
+}
+
+// Tendência simples
 function analisarTendencia(closes){
-  if(closes.length<3) return closes[0]>closes[1]?"CALL":"PUT";
-  const [c0,c1,c2]=closes;
+  const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3];
   if(c0>c1 && c1>c2) return "CALL";
   if(c0<c1 && c1<c2) return "PUT";
   return c0>c1?"CALL":"PUT";
 }
+
+// Combina todos indicadores
 function combinarIndicadores(closes){
-  const tend=analisarTendencia(closes);
-  const media=sma(closes);
-  const r=rsi(closes);
-  const m=macd(closes);
-  let sinal=tend;
-  if(tend==="CALL" && (closes[0]<media || r>70 || m<0)) sinal="PUT";
-  if(tend==="PUT" && (closes[0]>media || r<30 || m>0)) sinal="CALL";
-  let confianca=0;
-  if(sinal===tend) confianca++;
-  if((sinal==="CALL" && closes[0]>media) || (sinal==="PUT" && closes[0]<media)) confianca++;
-  if((sinal==="CALL" && r<70) || (sinal==="PUT" && r>30)) confianca++;
-  if((sinal==="CALL" && m>0) || (sinal==="PUT" && m<0)) confianca++;
-  return {sinal,media:r.toFixed(1),rsi:r.toFixed(1),macd:m.toFixed(4),confianca};
+  const tend = analisarTendencia(closes);
+  const media = sma(closes);
+  const r = rsi(closes);
+  const m = macd(closes);
+  const bb = bollinger(closes);
+  const a = adx(closes);
+
+  let score=0;
+  // Tendência
+  score += (tend==="CALL")?1:-1;
+  // SMA
+  score += (closes[closes.length-1]>media)?1:-1;
+  // RSI
+  score += (r>30 && r<70)?((tend==="CALL")?1:-1):((tend==="CALL")?-1:1);
+  // MACD
+  score += (m>0)?1:-1;
+  // Bollinger Bands
+  score += (closes[closes.length-1]>bb.upper)?-1:(closes[closes.length-1]<bb.lower)?1:0;
+  // ADX
+  score += (a>20)?1:0; // força de tendência
+
+  const sinalFinal = score>=0?"CALL":"PUT";
+
+  return {
+    sinal:sinalFinal,
+    media:media.toFixed(4),
+    rsi:r.toFixed(2),
+    macd:m.toFixed(4),
+    bbUpper:bb.upper.toFixed(4),
+    bbLower:bb.lower.toFixed(4),
+    adx:a.toFixed(2),
+    confianca:Math.min(Math.abs(score),6)
+  };
 }
 
-// Calcula próximo candle da corretora
+// Próximo candle
 function proximoCandle(tempo){
-  const agora = new Date();
-  let minutos = agora.getMinutes();
-  if(tempo==="1min") minutos = minutos + 1;
+  const agora = new Date(); let minutos=agora.getMinutes();
+  if(tempo==="1min") minutos+=1;
   if(tempo==="5min") minutos = 5*Math.ceil(minutos/5);
   if(tempo==="15min") minutos = 15*Math.ceil(minutos/15);
-  const entrada = new Date(agora);
-  entrada.setMinutes(minutos);
-  entrada.setSeconds(0);
-  entrada.setMilliseconds(0);
+  const entrada = new Date(agora); entrada.setMinutes(minutos); entrada.setSeconds(0); entrada.setMilliseconds(0);
   return entrada;
 }
 
-// Gera sinais e identifica o melhor timeframe
+// Gera sinais
 async function gerarSinaisEURUSD(){
-  let infoText="";
-  let sinais=[];
-
+  let infoText=""; let sinais=[];
   for(let i=0;i<tempos.length;i++){
-    const tempo=tempos[i];
-    const id=ids[i];
-    const elemento=document.getElementById(id);
-
+    const tempo=tempos[i]; const id=ids[i]; const elemento=document.getElementById(id);
     try{
-      const url=`https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${tempo}&outputsize=6&apikey=${API_KEY}`;
-      const res=await fetch(url);
-      const data=await res.json();
-      if(!data.values || data.values.length<3) continue;
-
-      const closes=data.values.slice(0,6).map(c=>parseFloat(c.close));
-      const ind=combinarIndicadores(closes);
+      const url=`https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${tempo}&outputsize=100&apikey=${API_KEY}`;
+      const res=await fetch(url); const data=await res.json();
+      if(!data.values || data.values.length<26) continue;
+      const closes = data.values.map(c=>parseFloat(c.close));
+      const ind = combinarIndicadores(closes);
       elemento.className="sinal "+(ind.sinal==="CALL"?"call":"put");
       elemento.innerText=`${ind.sinal} (${tempo})`;
-
       const entrada = proximoCandle(tempo);
       sinais.push({...ind,tempo,entrada});
-
-      infoText+=`${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd}\n`;
+      infoText += `${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6\n`;
     }catch(err){ console.error("Erro gerar sinal:",err); }
   }
-
   document.getElementById("info_eurusd").innerText=infoText;
-
   if(sinais.length>0){
     sinais.sort((a,b)=>b.confianca-a.confianca);
-    melhorSinalAtual=sinais[0];
-    document.getElementById("melhor_timeframe").innerText=`Melhor timeframe: ${melhorSinalAtual.tempo.toUpperCase()} → ${melhorSinalAtual.sinal} às ${melhorSinalAtual.entrada.getHours().toString().padStart(2,"0")}:${melhorSinalAtual.entrada.getMinutes().toString().padStart(2,"0")} (confiabilidade ${melhorSinalAtual.confianca}/4)`;
+    melhorSinalAtual = sinais[0];
+    document.getElementById("melhor_timeframe").innerText=`Melhor timeframe: ${melhorSinalAtual.tempo.toUpperCase()} → ${melhorSinalAtual.sinal} às ${melhorSinalAtual.entrada.getHours().toString().padStart(2,"0")}:${melhorSinalAtual.entrada.getMinutes().toString().padStart(2,"0")} (confiabilidade ${melhorSinalAtual.confianca}/6)`;
     tocarSom();
   }
 }
@@ -141,8 +189,6 @@ function atualizarTimer(){
 }
 
 setInterval(atualizarTimer,1000);
-
-// Primeira execução automática
 gerarSinaisEURUSD();
 </script>
 
