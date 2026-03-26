@@ -2,65 +2,63 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais PRO Inteligente</title>
+<title>Sala de Sinais EUR/USD Avançada</title>
 <style>
   body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
   h1 { margin:20px; }
-  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:20px; padding:20px; }
-  .card { background:#1e293b; padding:20px; border-radius:15px; }
+  .card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; width:350px; }
   .sinal { font-size:28px; margin:10px 0; }
   .call { color:#00ff88; }
   .put { color:#ff3b3b; }
-  .timer { font-size:20px; margin-top:10px; }
-  .signal-info { font-size:16px; margin-top:5px; line-height:1.4; }
-  .best { background:#00ff88; color:#0f172a; font-weight:bold; padding:8px; border-radius:10px; margin-top:10px; }
+  .btn { margin-top:15px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
+  .btn:hover { opacity:0.8; }
+  .signal-info { font-size:16px; margin-top:10px; line-height:1.4; white-space:pre-line; }
 </style>
 </head>
 <body>
 
-<h1>🔥 Sala de Sinais PRO Inteligente</h1>
+<h1>🔥 Sala de Sinais EUR/USD Avançada</h1>
 
-<div class="grid">
-  <div class="card">
-    <h3>EUR/USD</h3>
-    <div id="eurusd_m1" class="sinal">...</div>
-    <div id="timer_eurusd_m1" class="timer"></div>
-    <div id="info_eurusd_m1" class="signal-info"></div>
-  </div>
-
-  <div class="card">
-    <h3>GBP/USD</h3>
-    <div id="gbpusd_m1" class="sinal">...</div>
-    <div id="timer_gbpusd_m1" class="timer"></div>
-    <div id="info_gbpusd_m1" class="signal-info"></div>
-  </div>
-
-  <div class="card">
-    <h3>EUR/JPY</h3>
-    <div id="eurjpy_m1" class="sinal">...</div>
-    <div id="timer_eurjpy_m1" class="timer"></div>
-    <div id="info_eurjpy_m1" class="signal-info"></div>
-  </div>
-
-  <div class="card">
-    <h3>GBP/JPY</h3>
-    <div id="gbpjpy_m1" class="sinal">...</div>
-    <div id="timer_gbpjpy_m1" class="timer"></div>
-    <div id="info_gbpjpy_m1" class="signal-info"></div>
-  </div>
+<div class="card">
+  <h3>EUR/USD</h3>
+  <div id="eurusd_m1" class="sinal">...</div>
+  <div id="eurusd_m5" class="sinal">...</div>
+  <div id="eurusd_m15" class="sinal">...</div>
+  <button class="btn" onclick="gerarSinaisEURUSD()">Gerar Sinais</button>
+  <div id="info_eurusd" class="signal-info"></div>
 </div>
-
-<div id="best_pair" class="best">Melhor par agora: ...</div>
 
 <script>
 const API_KEY = "b7a8442395824a299190dc6f20845d6a";
-const pares = ["EUR/USD","GBP/USD","EUR/JPY","GBP/JPY"];
-let ultimos={};
 
-function tocarSom(){const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");audio.play();}
+// 🔔 Som
+function tocarSom(){ const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3"); audio.play(); }
 
-// Análise simples de candles
-function analisarSinal(closes){
+// Média Móvel Simples
+function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
+
+// RSI Simplificado
+function rsi(values){
+  let gains=0, losses=0;
+  for(let i=1;i<values.length;i++){
+    let diff=values[i]-values[i-1];
+    if(diff>0) gains+=diff;
+    else losses-=diff;
+  }
+  if(gains+losses===0) return 50;
+  return 100-(100/(1+gains/losses));
+}
+
+// MACD Simplificado: SMA rápida - SMA lenta
+function macd(values,fast=3,slow=6){
+  if(values.length<slow) return 0;
+  const smaFast=sma(values.slice(0,fast));
+  const smaSlow=sma(values.slice(0,slow));
+  return smaFast-smaSlow;
+}
+
+// Tendência por candles
+function analisarTendencia(closes){
   if(closes.length<3) return closes[0]>closes[1]?"CALL":"PUT";
   const [c0,c1,c2]=closes;
   if(c0>c1 && c1>c2) return "CALL";
@@ -68,71 +66,59 @@ function analisarSinal(closes){
   return c0>c1?"CALL":"PUT";
 }
 
-// Função que gera sinal e retorna confiabilidade
-async function gerarSinal(par){
-  try{
-    const url=`https://api.twelvedata.com/time_series?symbol=${par}&interval=1min&outputsize=5&apikey=${API_KEY}`;
-    const res=await fetch(url);
-    const data=await res.json();
-    if(!data.values||data.values.length<3) return null;
+// Combina indicadores para decidir CALL/PUT
+function combinarIndicadores(closes){
+  const tend=analisarTendencia(closes);
+  const media=sma(closes);
+  const r=rsi(closes);
+  const m=macd(closes);
 
-    const closes=data.values.slice(0,5).map(c=>parseFloat(c.close));
-    const sinal=analisarSinal(closes);
+  let sinal=tend;
 
-    // Confiança simples: quantos candles seguiram a tendência
-    let confianca=0;
-    for(let i=0;i<closes.length-1;i++){if(closes[i+1]>closes[i] && sinal==="CALL") confianca++; else if(closes[i+1]<closes[i] && sinal==="PUT") confianca++;}
+  // Filtros avançados
+  if(tend==="CALL" && (closes[0]<media || r>70 || m<0)) sinal="PUT";
+  if(tend==="PUT" && (closes[0]>media || r<30 || m>0)) sinal="CALL";
 
-    return {par,sinal,confianca};
-  }catch(err){
-    console.error("Erro gerarSinal:",err);
-    return null;
-  }
+  return {sinal,media:r.toFixed(1),rsi:r.toFixed(1),macd:m.toFixed(4)};
 }
 
-// Atualiza todos os pares e destaca o melhor
-async function atualizarSinais(){
-  const resultados=[];
-  for(const par of pares){
-    const res=await gerarSinal(par);
-    if(!res) continue;
-    resultados.push(res);
+// Gera sinais M1, M5, M15
+async function gerarSinaisEURUSD(){
+  const tempos = ["1min","5min","15min"];
+  const ids = ["eurusd_m1","eurusd_m5","eurusd_m15"];
+  let infoText="";
 
-    const id=par.toLowerCase().replace("/","_")+"_m1";
+  for(let i=0;i<tempos.length;i++){
+    const tempo=tempos[i];
+    const id=ids[i];
     const elemento=document.getElementById(id);
-    const info=document.getElementById("info_"+id);
-    elemento.className="sinal "+(res.sinal==="CALL"?"call":"put");
-    elemento.innerText=res.sinal;
-    info.innerText=`Confiabilidade: ${res.confianca}/4 | Entrada próxima 1min`;
+
+    try{
+      const url=`https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${tempo}&outputsize=6&apikey=${API_KEY}`;
+      const res=await fetch(url);
+      const data=await res.json();
+      if(!data.values||data.values.length<3) continue;
+
+      const closes=data.values.slice(0,6).map(c=>parseFloat(c.close));
+      const ind=combinarIndicadores(closes);
+
+      elemento.className="sinal "+(ind.sinal==="CALL"?"call":"put");
+      elemento.innerText=`${ind.sinal} (${tempo})`;
+
+      const agora=new Date();
+      let entradaMin=tempo==="1min"?1:tempo==="5min"?5:15;
+      const entrada=new Date(agora.getTime()+entradaMin*60000);
+      const h=entrada.getHours().toString().padStart(2,"0");
+      const m=entrada.getMinutes().toString().padStart(2,"0");
+
+      infoText+=`${tempo.toUpperCase()} → ${ind.sinal} às ${h}:${m} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd}\n`;
+
+    }catch(err){ console.error("Erro gerar sinal:",err); }
   }
 
-  // Melhor par
-  resultados.sort((a,b)=>b.confianca-a.confianca);
-  if(resultados.length>0){
-    const melhor=resultados[0];
-    const agora=new Date();
-    const proximo=new Date(agora.getTime()+60000);
-    const h=proximo.getHours().toString().padStart(2,"0");
-    const m=proximo.getMinutes().toString().padStart(2,"0");
-    document.getElementById("best_pair").innerText=`Melhor par agora: ${melhor.par} → ${melhor.sinal} às ${h}:${m} (confiabilidade ${melhor.confianca}/4)`;
-    tocarSom();
-  }
+  document.getElementById("info_eurusd").innerText=infoText;
+  tocarSom();
 }
-
-// Timer M1
-function atualizarContadorReal(){
-  const agora=new Date();
-  const segundos=agora.getSeconds();
-  const restanteM1=60-segundos;
-  for(const par of pares){
-    const id=par.toLowerCase().replace("/","_")+"_m1";
-    document.getElementById("timer_"+id).innerText=restanteM1+"s";
-  }
-  if(segundos===0) atualizarSinais();
-}
-
-setInterval(atualizarContadorReal,1000);
-atualizarSinais();
 </script>
 
 </body>
