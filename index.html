@@ -13,60 +13,15 @@
       padding: 20px; 
       color: #333;
     }
-    h1 { 
-      text-align: center; 
-      color: #2c3e50; 
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-      background: #fff;
-      padding: 25px;
-      border-radius: 10px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    }
-    .input-group {
-      display: flex;
-      justify-content: center;
-      margin-bottom: 20px;
-      gap: 10px;
-    }
-    input {
-      padding: 8px;
-      width: 150px;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-      font-size: 1em;
-      text-transform: uppercase;
-    }
-    button {
-      padding: 8px 15px;
-      border: none;
-      border-radius: 5px;
-      background-color: #3498db;
-      color: white;
-      cursor: pointer;
-      font-size: 1em;
-    }
-    button:hover {
-      background-color: #2980b9;
-    }
-    #dashboard {
-      text-align: center;
-      font-size: 1.3em;
-      font-weight: bold;
-      margin-bottom: 25px;
-    }
-    .chart-container {
-      position: relative;
-      height: 300px;
-      margin-bottom: 30px;
-    }
-    canvas {
-      background: #f9f9f9;
-      border-radius: 10px;
-      padding: 10px;
-    }
+    h1 { text-align: center; color: #2c3e50; }
+    .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .input-group { display: flex; justify-content: center; margin-bottom: 20px; gap: 10px; }
+    input { padding: 8px; width: 150px; border-radius: 5px; border: 1px solid #ccc; font-size: 1em; text-transform: uppercase; }
+    button { padding: 8px 15px; border: none; border-radius: 5px; background-color: #3498db; color: white; cursor: pointer; font-size: 1em; }
+    button:hover { background-color: #2980b9; }
+    #dashboard { text-align: center; font-size: 1.3em; font-weight: bold; margin-bottom: 25px; }
+    .chart-container { position: relative; height: 300px; margin-bottom: 30px; }
+    canvas { background: #f9f9f9; border-radius: 10px; padding: 10px; }
   </style>
 </head>
 <body>
@@ -77,13 +32,8 @@
       <button onclick="getSignal()">Obter Sinal</button>
     </div>
     <div id="dashboard">O sinal aparecerá aqui.</div>
-
-    <div class="chart-container">
-      <canvas id="priceChart"></canvas>
-    </div>
-    <div class="chart-container">
-      <canvas id="indicatorChart"></canvas>
-    </div>
+    <div class="chart-container"><canvas id="priceChart"></canvas></div>
+    <div class="chart-container"><canvas id="indicatorChart"></canvas></div>
   </div>
 
   <script>
@@ -94,19 +44,19 @@
       const dashboard = document.getElementById('dashboard');
       
       try {
-        // Requisição de sinal
+        // Obter sinal
         const resSignal = await fetch(`http://localhost:8000/signal?symbol=${symbol}`);
         const dataSignal = await resSignal.json();
-
-        // Atualiza dashboard com cores
         dashboard.innerHTML = `Par: ${dataSignal.symbol} | Sinal: ${dataSignal.signal}`;
         dashboard.style.color = dataSignal.signal === "CALL" ? "#27ae60" : "#e74c3c";
 
-        // Requisição dos dados históricos (CSV convertido para JSON no backend)
+        // Obter dados para gráficos
         const resData = await fetch(`http://localhost:8000/data?symbol=${symbol}`);
-        const data = await resData.json(); // espera: {labels: [], close: [], sma: [], ema: [], rsi: []}
+        const data = await resData.json();
 
-        // Atualiza gráfico de preços
+        if (data.error) throw new Error(data.error);
+
+        // Gráfico de preços
         const priceCtx = document.getElementById('priceChart').getContext('2d');
         if (priceChart) priceChart.destroy();
         priceChart = new Chart(priceCtx, {
@@ -114,7 +64,7 @@
           data: {
             labels: data.labels,
             datasets: [
-              { label: 'Preço Close', data: data.close, borderColor: '#2980b9', fill: false },
+              { label: 'Close', data: data.close, borderColor: '#2980b9', fill: false },
               { label: 'SMA', data: data.sma, borderColor: '#f39c12', fill: false },
               { label: 'EMA', data: data.ema, borderColor: '#8e44ad', fill: false },
             ]
@@ -122,7 +72,7 @@
           options: { responsive: true, plugins: { legend: { position: 'top' } } }
         });
 
-        // Atualiza gráfico de indicadores
+        // Gráfico de indicadores
         const indicatorCtx = document.getElementById('indicatorChart').getContext('2d');
         if (indicatorChart) indicatorChart.destroy();
         indicatorChart = new Chart(indicatorCtx, {
