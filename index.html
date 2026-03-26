@@ -2,157 +2,137 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais PRO</title>
+<title>Sala de Sinais PRO Inteligente</title>
 <style>
-  body {
-    background: #0f172a;
-    color: white;
-    font-family: Arial;
-    text-align: center;
-  }
-
-  h1 {
-    margin: 20px;
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    padding: 20px;
-  }
-
-  .card {
-    background: #1e293b;
-    padding: 20px;
-    border-radius: 15px;
-  }
-
-  .sinal {
-    font-size: 28px;
-    margin: 10px 0;
-  }
-
-  .call {
-    color: #00ff88;
-  }
-
-  .put {
-    color: #ff3b3b;
-  }
-
-  .timer {
-    font-size: 22px;
-    margin-top: 10px;
-  }
+  body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
+  h1 { margin:20px; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:20px; padding:20px; }
+  .card { background:#1e293b; padding:20px; border-radius:15px; }
+  .sinal { font-size:28px; margin:10px 0; }
+  .call { color:#00ff88; }
+  .put { color:#ff3b3b; }
+  .timer { font-size:20px; margin-top:10px; }
+  .signal-info { font-size:16px; margin-top:5px; line-height:1.4; }
+  .best { background:#00ff88; color:#0f172a; font-weight:bold; padding:8px; border-radius:10px; margin-top:10px; }
 </style>
 </head>
 <body>
 
-<h1>🔥 Sala de Sinais PRO</h1>
+<h1>🔥 Sala de Sinais PRO Inteligente</h1>
 
 <div class="grid">
   <div class="card">
-    <h3>EUR/USD M1</h3>
+    <h3>EUR/USD</h3>
     <div id="eurusd_m1" class="sinal">...</div>
     <div id="timer_eurusd_m1" class="timer"></div>
+    <div id="info_eurusd_m1" class="signal-info"></div>
   </div>
 
   <div class="card">
-    <h3>GBP/USD M1</h3>
+    <h3>GBP/USD</h3>
     <div id="gbpusd_m1" class="sinal">...</div>
     <div id="timer_gbpusd_m1" class="timer"></div>
+    <div id="info_gbpusd_m1" class="signal-info"></div>
   </div>
 
   <div class="card">
-    <h3>EUR/JPY M1</h3>
+    <h3>EUR/JPY</h3>
     <div id="eurjpy_m1" class="sinal">...</div>
     <div id="timer_eurjpy_m1" class="timer"></div>
+    <div id="info_eurjpy_m1" class="signal-info"></div>
   </div>
 
   <div class="card">
-    <h3>GBP/JPY M1</h3>
+    <h3>GBP/JPY</h3>
     <div id="gbpjpy_m1" class="sinal">...</div>
     <div id="timer_gbpjpy_m1" class="timer"></div>
+    <div id="info_gbpjpy_m1" class="signal-info"></div>
   </div>
 </div>
 
+<div id="best_pair" class="best">Melhor par agora: ...</div>
+
 <script>
 const API_KEY = "b7a8442395824a299190dc6f20845d6a";
+const pares = ["EUR/USD","GBP/USD","EUR/JPY","GBP/JPY"];
+let ultimos={};
 
-// 🔔 Tocar som
-function tocarSom() {
-  const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
-  audio.play();
+function tocarSom(){const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");audio.play();}
+
+// Análise simples de candles
+function analisarSinal(closes){
+  if(closes.length<3) return closes[0]>closes[1]?"CALL":"PUT";
+  const [c0,c1,c2]=closes;
+  if(c0>c1 && c1>c2) return "CALL";
+  if(c0<c1 && c1<c2) return "PUT";
+  return c0>c1?"CALL":"PUT";
 }
 
-// Salvar último sinal pra evitar repetir som
-let ultimos = {};
+// Função que gera sinal e retorna confiabilidade
+async function gerarSinal(par){
+  try{
+    const url=`https://api.twelvedata.com/time_series?symbol=${par}&interval=1min&outputsize=5&apikey=${API_KEY}`;
+    const res=await fetch(url);
+    const data=await res.json();
+    if(!data.values||data.values.length<3) return null;
 
-// Gerar sinal correto
-async function gerar(par, tempo, elemento, key) {
-  try {
-    const url = `https://api.twelvedata.com/time_series?symbol=${par}&interval=${tempo}&apikey=${API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    if (!data.values || data.values.length < 2) return;
+    const closes=data.values.slice(0,5).map(c=>parseFloat(c.close));
+    const sinal=analisarSinal(closes);
 
-    const ultimo = data.values[0];
-    const anterior = data.values[1];
+    // Confiança simples: quantos candles seguiram a tendência
+    let confianca=0;
+    for(let i=0;i<closes.length-1;i++){if(closes[i+1]>closes[i] && sinal==="CALL") confianca++; else if(closes[i+1]<closes[i] && sinal==="PUT") confianca++;}
 
-    let sinal = "";
-
-    // Corrigido: se último close > anterior → CALL (subida)
-    if (parseFloat(ultimo.close) > parseFloat(anterior.close)) {
-      sinal = "CALL";
-      elemento.className = "sinal call";
-    } else {
-      sinal = "PUT";
-      elemento.className = "sinal put";
-    }
-
-    // 🔔 toca som só se mudou
-    if (ultimos[key] !== sinal) {
-      tocarSom();
-      ultimos[key] = sinal;
-    }
-
-    elemento.innerText = sinal;
-  } catch (err) {
-    console.error("Erro ao gerar sinal:", err);
+    return {par,sinal,confianca};
+  }catch(err){
+    console.error("Erro gerarSinal:",err);
+    return null;
   }
 }
 
-// ⏱️ Atualizar contadores
-function atualizarContadorReal() {
-  const agora = new Date();
-  const segundos = agora.getSeconds();
-  const minutos = agora.getMinutes();
+// Atualiza todos os pares e destaca o melhor
+async function atualizarSinais(){
+  const resultados=[];
+  for(const par of pares){
+    const res=await gerarSinal(par);
+    if(!res) continue;
+    resultados.push(res);
 
-  const restanteM1 = 60 - segundos;
+    const id=par.toLowerCase().replace("/","_")+"_m1";
+    const elemento=document.getElementById(id);
+    const info=document.getElementById("info_"+id);
+    elemento.className="sinal "+(res.sinal==="CALL"?"call":"put");
+    elemento.innerText=res.sinal;
+    info.innerText=`Confiabilidade: ${res.confianca}/4 | Entrada próxima 1min`;
+  }
 
-  document.getElementById("timer_eurusd_m1").innerText = restanteM1 + "s";
-  document.getElementById("timer_gbpusd_m1").innerText = restanteM1 + "s";
-  document.getElementById("timer_eurjpy_m1").innerText = restanteM1 + "s";
-  document.getElementById("timer_gbpjpy_m1").innerText = restanteM1 + "s";
-
-  // Gerar novo sinal no início de cada minuto
-  if (segundos === 0) {
-    gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
-    gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
-    gerar("EUR/JPY", "1min", document.getElementById("eurjpy_m1"), "eurjpy_m1");
-    gerar("GBP/JPY", "1min", document.getElementById("gbpjpy_m1"), "gbpjpy_m1");
+  // Melhor par
+  resultados.sort((a,b)=>b.confianca-a.confianca);
+  if(resultados.length>0){
+    const melhor=resultados[0];
+    const agora=new Date();
+    const proximo=new Date(agora.getTime()+60000);
+    const h=proximo.getHours().toString().padStart(2,"0");
+    const m=proximo.getMinutes().toString().padStart(2,"0");
+    document.getElementById("best_pair").innerText=`Melhor par agora: ${melhor.par} → ${melhor.sinal} às ${h}:${m} (confiabilidade ${melhor.confianca}/4)`;
+    tocarSom();
   }
 }
 
-// Rodar contador a cada segundo
-setInterval(atualizarContadorReal, 1000);
+// Timer M1
+function atualizarContadorReal(){
+  const agora=new Date();
+  const segundos=agora.getSeconds();
+  const restanteM1=60-segundos;
+  for(const par of pares){
+    const id=par.toLowerCase().replace("/","_")+"_m1";
+    document.getElementById("timer_"+id).innerText=restanteM1+"s";
+  }
+  if(segundos===0) atualizarSinais();
+}
 
-// Primeira execução
-gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
-gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
-gerar("EUR/JPY", "1min", document.getElementById("eurjpy_m1"), "eurjpy_m1");
-gerar("GBP/JPY", "1min", document.getElementById("gbpjpy_m1"), "gbpjpy_m1");
+setInterval(atualizarContadorReal,1000);
+atualizarSinais();
 </script>
 
 </body>
