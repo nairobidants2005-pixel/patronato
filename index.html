@@ -2,11 +2,11 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais EUR/USD Inteligente - Máxima Precisão</title>
+<title>Sala de Sinais EUR/USD Inteligente - Multi-Timeframe</title>
 <style>
 body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
 h1 { margin:20px; }
-.card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; width:380px; }
+.card { background:#1e293b; padding:20px; border-radius:15px; margin:20px auto; width:400px; }
 .sinal { font-size:28px; margin:10px 0; }
 .call { color:#00ff88; }
 .put { color:#ff3b3b; }
@@ -18,7 +18,7 @@ h1 { margin:20px; }
 </head>
 <body>
 
-<h1>🔥 Sala de Sinais EUR/USD Inteligente</h1>
+<h1>🔥 Sala de Sinais EUR/USD Inteligente - Multi-Timeframe</h1>
 
 <div class="card">
   <h3>EUR/USD</h3>
@@ -27,7 +27,7 @@ h1 { margin:20px; }
   <div id="eurusd_m15" class="sinal">...</div>
   <button class="btn" onclick="gerarSinaisEURUSD()">Atualizar Sinais</button>
   <div id="info_eurusd" class="signal-info"></div>
-  <div id="melhor_timeframe" class="best">Melhor timeframe: ...</div>
+  <div id="melhor_timeframe" class="best">Melhor sinal sincronizado: ...</div>
   <div id="timer_entrada" class="signal-info"></div>
 </div>
 
@@ -37,15 +37,14 @@ const tempos = ["1min","5min","15min"];
 const ids = ["eurusd_m1","eurusd_m5","eurusd_m15"];
 let melhorSinalAtual = null;
 
-// 🔔 Som de alerta
+// Som
 function tocarSom(){
-  const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
+  const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
   audio.play();
 }
 
 // SMA
 function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
-
 // EMA
 function ema(values, period){
   const k = 2/(period+1);
@@ -53,8 +52,7 @@ function ema(values, period){
   for(let i=1;i<values.length;i++){ emaPrev = values[i]*k + emaPrev*(1-k); }
   return emaPrev;
 }
-
-// RSI clássico
+// RSI
 function rsi(values, period=14){
   if(values.length < period+1) return 50;
   let gains=0, losses=0;
@@ -65,13 +63,11 @@ function rsi(values, period=14){
   if(gains+losses===0) return 50;
   return 100-(100/(1+gains/losses));
 }
-
 // MACD
 function macd(values, fast=12, slow=26){
   if(values.length<slow) return 0;
   return ema(values.slice(-fast), fast)-ema(values.slice(-slow), slow);
 }
-
 // Bollinger Bands
 function bollinger(values, period=20, desv=2){
   if(values.length<period) return {upper:0, lower:0, middle:0};
@@ -80,19 +76,25 @@ function bollinger(values, period=20, desv=2){
   const std = Math.sqrt(subset.reduce((acc,v)=>acc+(v-m)**2,0)/period);
   return {middle:m, upper:m+desv*std, lower:m-desv*std};
 }
-
 // ADX
-function adx(values, period=14){
-  if(values.length<period+1) return 0;
-  let trs=0, plusDM=0, minusDM=0;
+function adx(candles, period=14){
+  if(candles.length<=period) return 0;
+  let trSum=0, plusDMsum=0, minusDMsum=0;
   for(let i=1;i<=period;i++){
-    const high = values[i]; const low = values[i]; const prev = values[i-1];
-    const up = high-prev>prev-low?Math.max(high-prev,0):0;
-    const down = prev-low>high-prev?Math.max(prev-low,0):0;
-    plusDM += up; minusDM += down;
-    trs += Math.abs(high-prev);
+    const high=parseFloat(candles[i].high);
+    const low=parseFloat(candles[i].low);
+    const prevHigh=parseFloat(candles[i-1].high);
+    const prevLow=parseFloat(candles[i-1].low);
+    const prevClose=parseFloat(candles[i-1].close);
+    const upMove = high-prevHigh;
+    const downMove = prevLow-low;
+    const plusDM = (upMove>downMove && upMove>0)?upMove:0;
+    const minusDM = (downMove>upMove && downMove>0)?downMove:0;
+    const tr = Math.max(high-low, Math.abs(high-prevClose), Math.abs(low-prevClose));
+    trSum += tr; plusDMsum += plusDM; minusDMsum += minusDM;
   }
-  const plusDI = 100*(plusDM/trs); const minusDI = 100*(minusDM/trs);
+  const plusDI = 100*(plusDMsum/trSum);
+  const minusDI = 100*(minusDMsum/trSum);
   return Math.abs(plusDI-minusDI)/(plusDI+minusDI)*100;
 }
 
@@ -104,28 +106,22 @@ function analisarTendencia(closes){
   return c0>c1?"CALL":"PUT";
 }
 
-// Combina todos indicadores
-function combinarIndicadores(closes){
+// Combina indicadores
+function combinarIndicadores(closes, candles){
   const tend = analisarTendencia(closes);
   const media = sma(closes);
   const r = rsi(closes);
   const m = macd(closes);
   const bb = bollinger(closes);
-  const a = adx(closes);
+  const a = adx(candles);
 
   let score=0;
-  // Tendência
   score += (tend==="CALL")?1:-1;
-  // SMA
   score += (closes[closes.length-1]>media)?1:-1;
-  // RSI
   score += (r>30 && r<70)?((tend==="CALL")?1:-1):((tend==="CALL")?-1:1);
-  // MACD
   score += (m>0)?1:-1;
-  // Bollinger Bands
   score += (closes[closes.length-1]>bb.upper)?-1:(closes[closes.length-1]<bb.lower)?1:0;
-  // ADX
-  score += (a>20)?1:0; // força de tendência
+  score += (a>20)?1:0;
 
   const sinalFinal = score>=0?"CALL":"PUT";
 
@@ -143,7 +139,7 @@ function combinarIndicadores(closes){
 
 // Próximo candle
 function proximoCandle(tempo){
-  const agora = new Date(); let minutos=agora.getMinutes();
+  const agora=new Date(); let minutos=agora.getMinutes();
   if(tempo==="1min") minutos+=1;
   if(tempo==="5min") minutos = 5*Math.ceil(minutos/5);
   if(tempo==="15min") minutos = 15*Math.ceil(minutos/15);
@@ -151,30 +147,43 @@ function proximoCandle(tempo){
   return entrada;
 }
 
-// Gera sinais
+// Gera sinais e sincroniza timeframes
 async function gerarSinaisEURUSD(){
   let infoText=""; let sinais=[];
+  let sinaisTF = [];
+
   for(let i=0;i<tempos.length;i++){
     const tempo=tempos[i]; const id=ids[i]; const elemento=document.getElementById(id);
     try{
       const url=`https://api.twelvedata.com/time_series?symbol=EUR/USD&interval=${tempo}&outputsize=100&apikey=${API_KEY}`;
       const res=await fetch(url); const data=await res.json();
       if(!data.values || data.values.length<26) continue;
-      const closes = data.values.map(c=>parseFloat(c.close));
-      const ind = combinarIndicadores(closes);
+
+      const candles = data.values.slice(-100);
+      const closes = candles.map(c=>parseFloat(c.close));
+      const ind = combinarIndicadores(closes, candles);
+
       elemento.className="sinal "+(ind.sinal==="CALL"?"call":"put");
       elemento.innerText=`${ind.sinal} (${tempo})`;
+
       const entrada = proximoCandle(tempo);
       sinais.push({...ind,tempo,entrada});
+      sinaisTF.push(ind.sinal);
+
       infoText += `${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6\n`;
     }catch(err){ console.error("Erro gerar sinal:",err); }
   }
+
   document.getElementById("info_eurusd").innerText=infoText;
-  if(sinais.length>0){
-    sinais.sort((a,b)=>b.confianca-a.confianca);
-    melhorSinalAtual = sinais[0];
-    document.getElementById("melhor_timeframe").innerText=`Melhor timeframe: ${melhorSinalAtual.tempo.toUpperCase()} → ${melhorSinalAtual.sinal} às ${melhorSinalAtual.entrada.getHours().toString().padStart(2,"0")}:${melhorSinalAtual.entrada.getMinutes().toString().padStart(2,"0")} (confiabilidade ${melhorSinalAtual.confianca}/6)`;
+
+  // Sinal sincronizado: só se os 3 timeframes concordarem
+  if(sinaisTF.length===3 && sinaisTF.every(v=>v===sinaisTF[0])){
+    melhorSinalAtual = sinais[0]; // pegamos qualquer, todos iguais
+    document.getElementById("melhor_timeframe").innerText=`Melhor sinal sincronizado: ${melhorSinalAtual.sinal} às ${melhorSinalAtual.entrada.getHours().toString().padStart(2,"0")}:${melhorSinalAtual.entrada.getMinutes().toString().padStart(2,"0")} (Confiabilidade ${melhorSinalAtual.confianca}/6)`;
     tocarSom();
+  } else {
+    document.getElementById("melhor_timeframe").innerText="Sem consenso entre os timeframes";
+    melhorSinalAtual = null;
   }
 }
 
