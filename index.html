@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais EUR/USD Inteligente</title>
+<title>Sala de Sinais EUR/USD Inteligente - Sincronizado</title>
 <style>
   body { background:#0f172a; color:white; font-family:Arial; text-align:center; }
   h1 { margin:20px; }
@@ -40,29 +40,21 @@ let melhorSinalAtual = null;
 // 🔔 Som
 function tocarSom(){ const audio=new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3"); audio.play(); }
 
-// Média móvel simples
+// Indicadores
 function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
-
-// RSI simplificado
 function rsi(values){
   let gains=0, losses=0;
   for(let i=1;i<values.length;i++){
-    let diff=values[i]-values[i-1];
+    const diff=values[i]-values[i-1];
     if(diff>0) gains+=diff; else losses-=diff;
   }
   if(gains+losses===0) return 50;
   return 100-(100/(1+gains/losses));
 }
-
-// MACD simplificado
 function macd(values,fast=3,slow=6){
   if(values.length<slow) return 0;
-  const smaFast=sma(values.slice(0,fast));
-  const smaSlow=sma(values.slice(0,slow));
-  return smaFast-smaSlow;
+  return sma(values.slice(0,fast))-sma(values.slice(0,slow));
 }
-
-// Tendência
 function analisarTendencia(closes){
   if(closes.length<3) return closes[0]>closes[1]?"CALL":"PUT";
   const [c0,c1,c2]=closes;
@@ -70,27 +62,34 @@ function analisarTendencia(closes){
   if(c0<c1 && c1<c2) return "PUT";
   return c0>c1?"CALL":"PUT";
 }
-
-// Combina indicadores
 function combinarIndicadores(closes){
   const tend=analisarTendencia(closes);
   const media=sma(closes);
   const r=rsi(closes);
   const m=macd(closes);
-
   let sinal=tend;
-  // Filtros: tendência + indicadores
   if(tend==="CALL" && (closes[0]<media || r>70 || m<0)) sinal="PUT";
   if(tend==="PUT" && (closes[0]>media || r<30 || m>0)) sinal="CALL";
-
-  // Confiabilidade simples: +1 para cada indicador que confirma
   let confianca=0;
   if(sinal===tend) confianca++;
   if((sinal==="CALL" && closes[0]>media) || (sinal==="PUT" && closes[0]<media)) confianca++;
   if((sinal==="CALL" && r<70) || (sinal==="PUT" && r>30)) confianca++;
   if((sinal==="CALL" && m>0) || (sinal==="PUT" && m<0)) confianca++;
-
   return {sinal,media:r.toFixed(1),rsi:r.toFixed(1),macd:m.toFixed(4),confianca};
+}
+
+// Calcula próximo candle da corretora
+function proximoCandle(tempo){
+  const agora = new Date();
+  let minutos = agora.getMinutes();
+  if(tempo==="1min") minutos = minutos + 1;
+  if(tempo==="5min") minutos = 5*Math.ceil(minutos/5);
+  if(tempo==="15min") minutos = 15*Math.ceil(minutos/15);
+  const entrada = new Date(agora);
+  entrada.setMinutes(minutos);
+  entrada.setSeconds(0);
+  entrada.setMilliseconds(0);
+  return entrada;
 }
 
 // Gera sinais e identifica o melhor timeframe
@@ -111,23 +110,18 @@ async function gerarSinaisEURUSD(){
 
       const closes=data.values.slice(0,6).map(c=>parseFloat(c.close));
       const ind=combinarIndicadores(closes);
-
       elemento.className="sinal "+(ind.sinal==="CALL"?"call":"put");
       elemento.innerText=`${ind.sinal} (${tempo})`;
 
-      const agora=new Date();
-      let entradaMin=tempo==="1min"?1:tempo==="5min"?5:15;
-      const entrada=new Date(agora.getTime()+entradaMin*60000);
+      const entrada = proximoCandle(tempo);
       sinais.push({...ind,tempo,entrada});
 
       infoText+=`${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd}\n`;
-
     }catch(err){ console.error("Erro gerar sinal:",err); }
   }
 
   document.getElementById("info_eurusd").innerText=infoText;
 
-  // Identifica o melhor timeframe
   if(sinais.length>0){
     sinais.sort((a,b)=>b.confianca-a.confianca);
     melhorSinalAtual=sinais[0];
