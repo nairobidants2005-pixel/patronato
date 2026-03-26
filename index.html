@@ -15,33 +15,24 @@ h1 { margin:20px; }
 .history span.call { color:#00ff88; }
 .history span.put { color:#ff3b3b; }
 .best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
+.btn { margin-top:10px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
+.btn:hover { opacity:0.8; }
 </style>
 </head>
 <body>
+
 <h1>🔥 Sala de Sinais Forex 1min</h1>
 <div id="cards-container"></div>
 
 <script>
-const API_KEY = "SUA_CHAVE_TWELVEDATA_AQUI"; // Troque pela sua key real
-const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_TELEGRAM"; // Troque
-const TELEGRAM_CHAT_ID = "SEU_CHAT_ID"; // Troque
-
+const API_KEY = "b7a8442395824a299190dc6f20845d6a"; // Troque pela sua chave real
 const ativos = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","NZD/USD","EUR/GBP","EUR/JPY"];
 const melhorSinais = {};
 
-// Som de alerta
+// Função de alerta sonoro
 function tocarSom(){
     const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
     audio.play();
-}
-
-// Enviar Telegram
-function enviarTelegram(mensagem){
-    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: mensagem })
-    }).catch(err=>console.error("Erro Telegram:", err));
 }
 
 // SMA simples
@@ -68,7 +59,7 @@ function analisarTendencia(closes){
     return c0>c1?"CALL":"PUT";
 }
 
-// Combinar indicadores
+// Combinar indicadores simples
 function combinarIndicadores(closes){
     const tend = analisarTendencia(closes);
     const media = sma(closes);
@@ -85,26 +76,33 @@ function criarCards(){
     const container=document.getElementById("cards-container");
     container.innerHTML="";
     ativos.forEach(ativo=>{
+        const idPrefix=ativo.replace("/","");
         const card=document.createElement("div");
-        card.className="card"; card.id=`card_${ativo.replace("/","")}`;
+        card.className="card";
+        card.id=`card_${idPrefix}`;
         card.innerHTML=`
             <h3>${ativo}</h3>
-            <div id="${ativo.replace("/","")}_1min" class="sinal">...</div>
-            <div id="melhor_${ativo.replace("/","")}" class="best">Sinal: ...</div>
-            <div id="history_${ativo.replace("/","")}" class="history"></div>
+            <div id="${idPrefix}_1min" class="sinal">---</div>
+            <button class="btn" onclick="gerarSinal('${ativo}')">Gerar Sinal</button>
+            <div id="melhor_${idPrefix}" class="best">Sinal: ---</div>
+            <div id="history_${idPrefix}" class="history"></div>
         `;
         container.appendChild(card);
     });
 }
 
-// Gerar sinais
-async function gerarSinais(ativo){
+// Gerar sinal manual
+async function gerarSinal(ativo){
     const idPrefix=ativo.replace("/","");
     try{
-        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=50&apikey=${API_KEY}`;
-        const res = await fetch(url); const data = await res.json();
-        if(!data.values || data.values.length<3) return;
-        const closes = data.values.map(c=>parseFloat(c.close)).reverse(); // Mais recente último
+        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=20&apikey=${API_KEY}`;
+        const res=await fetch(url);
+        const data=await res.json();
+        if(!data.values || data.values.length<3){
+            alert("Dados insuficientes para gerar sinal.");
+            return;
+        }
+        const closes = data.values.map(c=>parseFloat(c.close)).reverse();
         const ind = combinarIndicadores(closes);
 
         // Atualiza card
@@ -116,7 +114,6 @@ async function gerarSinais(ativo){
         const melhor = melhorSinais[ativo];
         if(!melhor || melhor.sinal !== ind.sinal){
             tocarSom();
-            enviarTelegram(`💹 ${ativo} → ${ind.sinal} (1min)`);
         }
         melhorSinais[ativo] = {...ind,tempo:"1min",entrada:new Date()};
 
@@ -125,13 +122,15 @@ async function gerarSinais(ativo){
         span.innerText=`${new Date().toLocaleTimeString()} → ${ind.sinal}\n`; hist.prepend(span);
 
         document.getElementById(`melhor_${idPrefix}`).innerText=`Sinal: ${ind.sinal}`;
-    }catch(err){ console.error(err); }
+    }catch(err){
+        console.error(err);
+        alert("Erro ao buscar dados. Verifique sua API Key.");
+    }
 }
 
 // Inicialização
 criarCards();
-ativos.forEach(a=>gerarSinais(a));
-setInterval(()=>{ ativos.forEach(a=>gerarSinais(a)); },15000); // A cada 15s
 </script>
+
 </body>
 </html>
