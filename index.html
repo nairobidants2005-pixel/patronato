@@ -3,63 +3,59 @@
 <head>
 <meta charset="UTF-8">
 <title>Sala de Sinais PRO</title>
-
 <style>
-body {
-  background: #0f172a;
-  color: white;
-  font-family: Arial;
-  text-align: center;
-}
+  body {
+    background: #0f172a;
+    color: white;
+    font-family: Arial;
+    text-align: center;
+  }
 
-h1 {
-  margin: 20px;
-}
+  h1 {
+    margin: 20px;
+  }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  padding: 20px;
-}
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    padding: 20px;
+  }
 
-.card {
-  background: #1e293b;
-  padding: 20px;
-  border-radius: 15px;
-}
+  .card {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 15px;
+  }
 
-.sinal {
-  font-size: 28px;
-  margin: 10px 0;
-}
+  .sinal {
+    font-size: 28px;
+    margin: 10px 0;
+  }
 
-.call { color: #00ff88; }
-.put { color: #ff3b3b; }
+  .call {
+    color: #00ff88;
+  }
 
-.timer {
-  font-size: 22px;
-  margin-top: 10px;
-}
+  .put {
+    color: #ff3b3b;
+  }
+
+  .timer {
+    font-size: 22px;
+    margin-top: 10px;
+  }
 </style>
 </head>
-
 <body>
 
 <h1>🔥 Sala de Sinais PRO</h1>
 
 <div class="grid">
-
   <div class="card">
     <h3>EUR/USD M1</h3>
     <div id="eurusd_m1" class="sinal">...</div>
     <div id="timer_eurusd_m1" class="timer"></div>
-  </div>
-
-  <div class="card">
-    <h3>EUR/USD M5</h3>
-    <div id="eurusd_m5" class="sinal">...</div>
-    <div id="timer_eurusd_m5" class="timer"></div>
   </div>
 
   <div class="card">
@@ -69,94 +65,94 @@ h1 {
   </div>
 
   <div class="card">
-    <h3>GBP/USD M5</h3>
-    <div id="gbpusd_m5" class="sinal">...</div>
-    <div id="timer_gbpusd_m5" class="timer"></div>
+    <h3>EUR/JPY M1</h3>
+    <div id="eurjpy_m1" class="sinal">...</div>
+    <div id="timer_eurjpy_m1" class="timer"></div>
   </div>
 
+  <div class="card">
+    <h3>GBP/JPY M1</h3>
+    <div id="gbpjpy_m1" class="sinal">...</div>
+    <div id="timer_gbpjpy_m1" class="timer"></div>
+  </div>
 </div>
 
 <script>
 const API_KEY = "b7a8442395824a299190dc6f20845d6a";
 
-// 🔔 som
+// 🔔 Tocar som
 function tocarSom() {
   const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
   audio.play();
 }
 
-// salvar último sinal pra evitar repetir som
+// Salvar último sinal pra evitar repetir som
 let ultimos = {};
 
-// gerar sinal
+// Gerar sinal correto
 async function gerar(par, tempo, elemento, key) {
-  const url = `https://api.twelvedata.com/time_series?symbol=${par}&interval=${tempo}&apikey=${API_KEY}`;
+  try {
+    const url = `https://api.twelvedata.com/time_series?symbol=${par}&interval=${tempo}&apikey=${API_KEY}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    if (!data.values || data.values.length < 2) return;
 
-  const response = await fetch(url);
-  const data = await response.json();
+    const ultimo = data.values[0];
+    const anterior = data.values[1];
 
-  if (!data.values) return;
+    let sinal = "";
 
-  const ultimo = data.values[0];
-  const anterior = data.values[1];
+    // Corrigido: se último close > anterior → CALL (subida)
+    if (parseFloat(ultimo.close) > parseFloat(anterior.close)) {
+      sinal = "CALL";
+      elemento.className = "sinal call";
+    } else {
+      sinal = "PUT";
+      elemento.className = "sinal put";
+    }
 
-  let sinal = "";
+    // 🔔 toca som só se mudou
+    if (ultimos[key] !== sinal) {
+      tocarSom();
+      ultimos[key] = sinal;
+    }
 
-  if (parseFloat(ultimo.close) > parseFloat(anterior.close)) {
-    sinal = "CALL";
-    elemento.className = "sinal call";
-  } else {
-    sinal = "PUT";
-    elemento.className = "sinal put";
+    elemento.innerText = sinal;
+  } catch (err) {
+    console.error("Erro ao gerar sinal:", err);
   }
-
-  // 🔔 só toca se mudar
-  if (ultimos[key] !== sinal) {
-    tocarSom();
-    ultimos[key] = sinal;
-  }
-
-  elemento.innerText = sinal;
 }
 
-// ⏱️ CONTADOR REAL (SINCRONIZADO)
+// ⏱️ Atualizar contadores
 function atualizarContadorReal() {
   const agora = new Date();
-
   const segundos = agora.getSeconds();
   const minutos = agora.getMinutes();
 
   const restanteM1 = 60 - segundos;
 
-  const restoMin = minutos % 5;
-  const restanteM5 = (5 - restoMin) * 60 - segundos;
-
   document.getElementById("timer_eurusd_m1").innerText = restanteM1 + "s";
   document.getElementById("timer_gbpusd_m1").innerText = restanteM1 + "s";
+  document.getElementById("timer_eurjpy_m1").innerText = restanteM1 + "s";
+  document.getElementById("timer_gbpjpy_m1").innerText = restanteM1 + "s";
 
-  document.getElementById("timer_eurusd_m5").innerText = restanteM5 + "s";
-  document.getElementById("timer_gbpusd_m5").innerText = restanteM5 + "s";
-
-  // ⏱️ quando zerar → gera novo sinal
-  if (restanteM1 === 60) {
+  // Gerar novo sinal no início de cada minuto
+  if (segundos === 0) {
     gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
     gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
-  }
-
-  if (restanteM5 === 300) {
-    gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"), "eurusd_m5");
-    gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"), "gbpusd_m5");
+    gerar("EUR/JPY", "1min", document.getElementById("eurjpy_m1"), "eurjpy_m1");
+    gerar("GBP/JPY", "1min", document.getElementById("gbpjpy_m1"), "gbpjpy_m1");
   }
 }
 
-// rodar
+// Rodar contador a cada segundo
 setInterval(atualizarContadorReal, 1000);
 
-// primeira execução
+// Primeira execução
 gerar("EUR/USD", "1min", document.getElementById("eurusd_m1"), "eurusd_m1");
-gerar("EUR/USD", "5min", document.getElementById("eurusd_m5"), "eurusd_m5");
 gerar("GBP/USD", "1min", document.getElementById("gbpusd_m1"), "gbpusd_m1");
-gerar("GBP/USD", "5min", document.getElementById("gbpusd_m5"), "gbpusd_m5");
+gerar("EUR/JPY", "1min", document.getElementById("eurjpy_m1"), "eurjpy_m1");
+gerar("GBP/JPY", "1min", document.getElementById("gbpjpy_m1"), "gbpjpy_m1");
 </script>
 
 </body>
