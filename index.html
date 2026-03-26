@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais Inteligente - Tempo Real</title>
+<title>Sala de Sinais Forex 1min</title>
 <style>
 body { background:#0f172a; color:white; font-family:Arial, sans-serif; text-align:center; }
 h1 { margin:20px; }
@@ -10,26 +10,23 @@ h1 { margin:20px; }
 .sinal { font-size:24px; margin:10px 0; }
 .call { color:#00ff88; }
 .put { color:#ff3b3b; }
-.btn { margin-top:15px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-size:16px; background:#00aaff; color:white; }
-.btn:hover { opacity:0.8; }
 .signal-info { font-size:14px; margin-top:10px; line-height:1.4; white-space:pre-line; }
-.best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
 .history { text-align:left; font-size:12px; margin-top:10px; max-height:120px; overflow-y:auto; background:#111827; padding:5px; border-radius:8px; }
 .history span.call { color:#00ff88; }
 .history span.put { color:#ff3b3b; }
+.best { background:#00ff88; color:#0f172a; font-weight:bold; padding:10px; border-radius:12px; margin-top:15px; }
 </style>
 </head>
 <body>
-
-<h1>🔥 Sala de Sinais Inteligente - Tempo Real</h1>
-
+<h1>🔥 Sala de Sinais Forex 1min</h1>
 <div id="cards-container"></div>
 
 <script>
-const API_KEY = "b7a8442395824a299190dc6f20845d6a";
-const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";
-const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";
-const ativos = ["EUR/USD","GBP/USD","USD/JPY"];
+const API_KEY = "SUA_CHAVE_TWELVEDATA_AQUI"; // Troque pela sua key real
+const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_TELEGRAM"; // Troque
+const TELEGRAM_CHAT_ID = "SEU_CHAT_ID"; // Troque
+
+const ativos = ["EUR/USD","GBP/USD","USD/JPY","AUD/USD","USD/CAD","NZD/USD","EUR/GBP","EUR/JPY"];
 const melhorSinais = {};
 
 // Som de alerta
@@ -38,7 +35,7 @@ function tocarSom(){
     audio.play();
 }
 
-// Enviar sinal para Telegram
+// Enviar Telegram
 function enviarTelegram(mensagem){
     fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{
         method:"POST",
@@ -47,29 +44,40 @@ function enviarTelegram(mensagem){
     }).catch(err=>console.error("Erro Telegram:", err));
 }
 
-// Indicadores
+// SMA simples
 function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
-function ema(values, period){ const k=2/(period+1); let e=values[0]; for(let i=1;i<values.length;i++){ e=values[i]*k+e*(1-k); } return e; }
-function rsi(values, period=14){ if(values.length<period+1) return 50; let gains=0,losses=0; for(let i=1;i<=period;i++){ const d=values[i]-values[i-1]; if(d>0) gains+=d; else losses-=d; } if(gains+losses===0) return 50; return 100-(100/(1+gains/losses)); }
-function macd(values, fast=12, slow=26){ if(values.length<slow) return 0; return ema(values.slice(-fast),fast)-ema(values.slice(-slow),slow); }
-function bollinger(values, period=20, desv=2){ if(values.length<period) return {upper:0,lower:0,middle:0}; const sub=values.slice(-period); const m=sma(sub); const std=Math.sqrt(sub.reduce((acc,v)=>acc+(v-m)**2,0)/period); return {middle:m, upper:m+desv*std, lower:m-desv*std}; }
-function adx(candles, period=14){ if(candles.length<=period) return 0; let trSum=0, plusDMsum=0, minusDMsum=0; for(let i=1;i<=period;i++){ const h=parseFloat(candles[i].high), l=parseFloat(candles[i].low), ph=parseFloat(candles[i-1].high), pl=parseFloat(candles[i-1].low), pc=parseFloat(candles[i-1].close); const up=h-ph, down=pl-l; plusDMsum+=(up>down&&up>0)?up:0; minusDMsum+=(down>up&&down>0)?down:0; const tr=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc)); trSum+=tr; } const plusDI=100*(plusDMsum/trSum), minusDI=100*(minusDMsum/trSum); return Math.abs(plusDI-minusDI)/(plusDI+minusDI)*100; }
+
+// RSI simples
+function rsi(values, period=14){
+    if(values.length < period+1) return 50;
+    let gains=0, losses=0;
+    for(let i=1;i<=period;i++){
+        const d = values[i]-values[i-1];
+        if(d>0) gains+=d;
+        else losses-=d;
+    }
+    if(gains+losses===0) return 50;
+    return 100-(100/(1+gains/losses));
+}
 
 // Tendência simples
-function analisarTendencia(closes){ const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3]; if(c0>c1 && c1>c2) return "CALL"; if(c0<c1 && c1<c2) return "PUT"; return c0>c1?"CALL":"PUT"; }
+function analisarTendencia(closes){
+    const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3];
+    if(c0>c1 && c1>c2) return "CALL";
+    if(c0<c1 && c1<c2) return "PUT";
+    return c0>c1?"CALL":"PUT";
+}
 
 // Combinar indicadores
-function combinarIndicadores(closes,candles){
-    const tend=analisarTendencia(closes), media=sma(closes), r=rsi(closes), m=macd(closes), bb=bollinger(closes), a=adx(candles);
-    let score=0;
-    score+=(tend==="CALL")?1:-1;
-    score+=(closes[closes.length-1]>media)?1:-1;
-    score+=(r>30&&r<70)?((tend==="CALL")?1:-1):((tend==="CALL")?-1:1);
-    score+=(m>0)?1:-1;
-    score+=(closes[closes.length-1]>bb.upper)?-1:(closes[closes.length-1]<bb.lower)?1:0;
-    score+=(a>20)?1:0;
+function combinarIndicadores(closes){
+    const tend = analisarTendencia(closes);
+    const media = sma(closes);
+    const r = rsi(closes);
+    let score = 0;
+    score += (tend==="CALL")?1:-1;
+    score += (closes[closes.length-1]>media)?1:-1;
     const sinalFinal = score>=0?"CALL":"PUT";
-    return { sinal:sinalFinal, media:media.toFixed(4), rsi:r.toFixed(2), macd:m.toFixed(4), bbUpper:bb.upper.toFixed(4), bbLower:bb.lower.toFixed(4), adx:a.toFixed(2), confianca:Math.min(Math.abs(score),6) };
+    return { sinal:sinalFinal, media:media.toFixed(4), rsi:r.toFixed(2), confianca:Math.min(Math.abs(score),2) };
 }
 
 // Criar cards
@@ -82,7 +90,6 @@ function criarCards(){
         card.innerHTML=`
             <h3>${ativo}</h3>
             <div id="${ativo.replace("/","")}_1min" class="sinal">...</div>
-            <div id="info_${ativo.replace("/","")}" class="signal-info"></div>
             <div id="melhor_${ativo.replace("/","")}" class="best">Sinal: ...</div>
             <div id="history_${ativo.replace("/","")}" class="history"></div>
         `;
@@ -90,51 +97,41 @@ function criarCards(){
     });
 }
 
-// Gera sinais em tempo real
-async function gerarSinaisTempoReal(ativo){
+// Gerar sinais
+async function gerarSinais(ativo){
     const idPrefix=ativo.replace("/","");
     try{
-        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=100&apikey=${API_KEY}`;
-        const res=await fetch(url); const data=await res.json();
-        if(!data.values || data.values.length<26) return;
-        const candles=data.values.slice(-100);
-        const closes=candles.map(c=>parseFloat(c.close));
-        const ind=combinarIndicadores(closes,candles);
+        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=50&apikey=${API_KEY}`;
+        const res = await fetch(url); const data = await res.json();
+        if(!data.values || data.values.length<3) return;
+        const closes = data.values.map(c=>parseFloat(c.close)).reverse(); // Mais recente último
+        const ind = combinarIndicadores(closes);
 
         // Atualiza card
         const elem=document.getElementById(`${idPrefix}_1min`);
         elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
         elem.innerText=`${ind.sinal} (1min)`;
 
-        // Sinal
-        const agora=new Date();
-        const entrada=new Date(agora); entrada.setSeconds(0); entrada.setMilliseconds(0); entrada.setMinutes(entrada.getMinutes()+1);
+        // Histórico e melhor sinal
         const melhor = melhorSinais[ativo];
-        // Só toca som e envia Telegram se mudou
         if(!melhor || melhor.sinal !== ind.sinal){
             tocarSom();
-            enviarTelegram(`💹 ${ativo} → ${ind.sinal} (Tempo Real)`);
+            enviarTelegram(`💹 ${ativo} → ${ind.sinal} (1min)`);
         }
-        melhorSinais[ativo]={...ind,tempo:"1min",entrada};
+        melhorSinais[ativo] = {...ind,tempo:"1min",entrada:new Date()};
 
-        // Atualiza info
-        document.getElementById(`info_${idPrefix}`).innerText =
-            `1MIN → ${ind.sinal} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6`;
-
-        // Histórico
         const hist=document.getElementById(`history_${idPrefix}`);
         const span=document.createElement("span"); span.className=ind.sinal.toLowerCase();
-        span.innerText=`${new Date().toLocaleTimeString()} → ${ind.sinal} (1min)\n`; hist.prepend(span);
+        span.innerText=`${new Date().toLocaleTimeString()} → ${ind.sinal}\n`; hist.prepend(span);
 
-        // Melhor sinal
         document.getElementById(`melhor_${idPrefix}`).innerText=`Sinal: ${ind.sinal}`;
     }catch(err){ console.error(err); }
 }
 
 // Inicialização
 criarCards();
-ativos.forEach(a=>gerarSinaisTempoReal(a));
-setInterval(()=>{ ativos.forEach(a=>gerarSinaisTempoReal(a)); },1000);
+ativos.forEach(a=>gerarSinais(a));
+setInterval(()=>{ ativos.forEach(a=>gerarSinais(a)); },15000); // A cada 15s
 </script>
 </body>
 </html>
