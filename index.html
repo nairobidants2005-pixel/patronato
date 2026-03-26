@@ -26,209 +26,137 @@ h1 { margin:20px; }
 <div id="cards-container"></div>
 
 <script>
-const API_KEY = "b7a8442395824a299190dc6f20845d6a";
-const tempos = ["1min","5min"];
+const API_KEY = "b7a8442395824a299190dc6f20845d6a"; // sua chave
+const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";       // coloque o token do bot
+const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";      // coloque seu chat_id
+const tempos = ["30s","1min"];
 const ativos = ["EUR/USD","GBP/USD","USD/JPY"];
-const intervaloAtualizacao = 60000; // 1 min
+const intervaloAtualizacao = 15000; // 15s
 const melhorSinais = {};
 
 function tocarSom(){
-  const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
-  audio.play();
+    const audio = new Audio("https://www.soundjay.com/buttons/sounds/button-3.mp3");
+    audio.play();
+}
+
+// Função para enviar Telegram
+function enviarTelegram(mensagem){
+    fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: mensagem })
+    }).catch(err=>console.error("Erro Telegram:", err));
 }
 
 // Indicadores
 function sma(values){ return values.reduce((a,b)=>a+b,0)/values.length; }
-function ema(values, period){
-  const k = 2/(period+1);
-  let emaPrev = values[0];
-  for(let i=1;i<values.length;i++){ emaPrev = values[i]*k + emaPrev*(1-k); }
-  return emaPrev;
-}
-function rsi(values, period=14){
-  if(values.length < period+1) return 50;
-  let gains=0, losses=0;
-  for(let i=1;i<=period;i++){
-    const diff = values[i]-values[i-1];
-    if(diff>0) gains+=diff; else losses-=diff;
-  }
-  if(gains+losses===0) return 50;
-  return 100-(100/(1+gains/losses));
-}
-function macd(values, fast=12, slow=26){
-  if(values.length<slow) return 0;
-  return ema(values.slice(-fast), fast)-ema(values.slice(-slow), slow);
-}
-function bollinger(values, period=20, desv=2){
-  if(values.length<period) return {upper:0, lower:0, middle:0};
-  const subset = values.slice(-period);
-  const m = sma(subset);
-  const std = Math.sqrt(subset.reduce((acc,v)=>acc+(v-m)**2,0)/period);
-  return {middle:m, upper:m+desv*std, lower:m-desv*std};
-}
-function adx(candles, period=14){
-  if(candles.length<=period) return 0;
-  let trSum=0, plusDMsum=0, minusDMsum=0;
-  for(let i=1;i<=period;i++){
-    const high=parseFloat(candles[i].high);
-    const low=parseFloat(candles[i].low);
-    const prevHigh=parseFloat(candles[i-1].high);
-    const prevLow=parseFloat(candles[i-1].low);
-    const prevClose=parseFloat(candles[i-1].close);
-    const upMove = high-prevHigh;
-    const downMove = prevLow-low;
-    const plusDM = (upMove>downMove && upMove>0)?upMove:0;
-    const minusDM = (downMove>upMove && downMove>0)?downMove:0;
-    const tr = Math.max(high-low, Math.abs(high-prevClose), Math.abs(low-prevClose));
-    trSum += tr; plusDMsum += plusDM; minusDMsum += minusDM;
-  }
-  const plusDI = 100*(plusDMsum/trSum);
-  const minusDI = 100*(minusDMsum/trSum);
-  return Math.abs(plusDI-minusDI)/(plusDI+minusDI)*100;
-}
+function ema(values, period){ const k=2/(period+1); let e=values[0]; for(let i=1;i<values.length;i++){ e=values[i]*k+e*(1-k); } return e; }
+function rsi(values, period=14){ if(values.length<period+1) return 50; let gains=0,losses=0; for(let i=1;i<=period;i++){ const d=values[i]-values[i-1]; if(d>0) gains+=d; else losses-=d; } if(gains+losses===0) return 50; return 100-(100/(1+gains/losses)); }
+function macd(values, fast=12, slow=26){ if(values.length<slow) return 0; return ema(values.slice(-fast),fast)-ema(values.slice(-slow),slow); }
+function bollinger(values, period=20, desv=2){ if(values.length<period) return {upper:0,lower:0,middle:0}; const sub=values.slice(-period); const m=sma(sub); const std=Math.sqrt(sub.reduce((acc,v)=>acc+(v-m)**2,0)/period); return {middle:m, upper:m+desv*std, lower:m-desv*std}; }
+function adx(candles, period=14){ if(candles.length<=period) return 0; let trSum=0, plusDMsum=0, minusDMsum=0; for(let i=1;i<=period;i++){ const h=parseFloat(candles[i].high), l=parseFloat(candles[i].low), ph=parseFloat(candles[i-1].high), pl=parseFloat(candles[i-1].low), pc=parseFloat(candles[i-1].close); const up=h-ph, down=pl-l; plusDMsum+=(up>down&&up>0)?up:0; minusDMsum+=(down>up&&down>0)?down:0; const tr=Math.max(h-l,Math.abs(h-pc),Math.abs(l-pc)); trSum+=tr; } const plusDI=100*(plusDMsum/trSum), minusDI=100*(minusDMsum/trSum); return Math.abs(plusDI-minusDI)/(plusDI+minusDI)*100; }
 
 // Tendência simples
-function analisarTendencia(closes){
-  const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3];
-  if(c0>c1 && c1>c2) return "CALL";
-  if(c0<c1 && c1<c2) return "PUT";
-  return c0>c1?"CALL":"PUT";
-}
+function analisarTendencia(closes){ const c0=closes[closes.length-1], c1=closes[closes.length-2], c2=closes[closes.length-3]; if(c0>c1 && c1>c2) return "CALL"; if(c0<c1 && c1<c2) return "PUT"; return c0>c1?"CALL":"PUT"; }
 
-// Combina indicadores
-function combinarIndicadores(closes, candles){
-  const tend = analisarTendencia(closes);
-  const media = sma(closes);
-  const r = rsi(closes);
-  const m = macd(closes);
-  const bb = bollinger(closes);
-  const a = adx(candles);
-
-  let score=0;
-  score += (tend==="CALL")?1:-1;
-  score += (closes[closes.length-1]>media)?1:-1;
-  score += (r>30 && r<70)?((tend==="CALL")?1:-1):((tend==="CALL")?-1:1);
-  score += (m>0)?1:-1;
-  score += (closes[closes.length-1]>bb.upper)?-1:(closes[closes.length-1]<bb.lower)?1:0;
-  score += (a>20)?1:0;
-
-  const sinalFinal = score>=0?"CALL":"PUT";
-
-  return {
-    sinal:sinalFinal,
-    media:media.toFixed(4),
-    rsi:r.toFixed(2),
-    macd:m.toFixed(4),
-    bbUpper:bb.upper.toFixed(4),
-    bbLower:bb.lower.toFixed(4),
-    adx:a.toFixed(2),
-    confianca:Math.min(Math.abs(score),6)
-  };
+// Combinar indicadores
+function combinarIndicadores(closes,candles){
+    const tend=analisarTendencia(closes), media=sma(closes), r=rsi(closes), m=macd(closes), bb=bollinger(closes), a=adx(candles);
+    let score=0;
+    score+=(tend==="CALL")?1:-1;
+    score+=(closes[closes.length-1]>media)?1:-1;
+    score+=(r>30&&r<70)?((tend==="CALL")?1:-1):((tend==="CALL")?-1:1);
+    score+=(m>0)?1:-1;
+    score+=(closes[closes.length-1]>bb.upper)?-1:(closes[closes.length-1]<bb.lower)?1:0;
+    score+=(a>20)?1:0;
+    const sinalFinal = score>=0?"CALL":"PUT";
+    return { sinal:sinalFinal, media:media.toFixed(4), rsi:r.toFixed(2), macd:m.toFixed(4), bbUpper:bb.upper.toFixed(4), bbLower:bb.lower.toFixed(4), adx:a.toFixed(2), confianca:Math.min(Math.abs(score),6) };
 }
 
 // Próximo candle
 function proximoCandle(tempo){
-  const agora=new Date();
-  let minutos = agora.getMinutes();
-  if(tempo==="1min") minutos+=1;
-  if(tempo==="5min") minutos = 5*Math.ceil(minutos/5);
-  const entrada = new Date(agora);
-  entrada.setMinutes(minutos);
-  entrada.setSeconds(0);
-  entrada.setMilliseconds(0);
-  return entrada;
+    const agora=new Date();
+    let minutos=agora.getMinutes();
+    if(tempo==="1min") minutos+=1;
+    if(tempo==="30s") minutos+=0.5; // aproximado
+    const entrada=new Date(agora); entrada.setMinutes(Math.floor(minutos)); entrada.setSeconds(0); entrada.setMilliseconds(0);
+    return entrada;
 }
 
-// Cria cards dinâmicos para cada ativo
+// Criar cards
 function criarCards(){
-  const container = document.getElementById("cards-container");
-  container.innerHTML="";
-  ativos.forEach(ativo=>{
-    const card = document.createElement("div");
-    card.className="card";
-    card.id = `card_${ativo.replace("/","")}`;
-    card.innerHTML = `
-      <h3>${ativo}</h3>
-      ${tempos.map(t=>`<div id="${ativo.replace("/","")}_${t}" class="sinal">...</div>`).join("")}
-      <button class="btn" onclick="gerarSinais('${ativo}')">Atualizar Sinais</button>
-      <div id="info_${ativo.replace("/","")}" class="signal-info"></div>
-      <div id="melhor_${ativo.replace("/","")}" class="best">Melhor sinal sincronizado: ...</div>
-      <div id="timer_${ativo.replace("/","")}" class="signal-info"></div>
-      <div id="history_${ativo.replace("/","")}" class="history"></div>
-    `;
-    container.appendChild(card);
-  });
+    const container=document.getElementById("cards-container");
+    container.innerHTML="";
+    ativos.forEach(ativo=>{
+        const card=document.createElement("div");
+        card.className="card"; card.id=`card_${ativo.replace("/","")}`;
+        card.innerHTML=`
+            <h3>${ativo}</h3>
+            ${tempos.map(t=>`<div id="${ativo.replace("/","")}_${t}" class="sinal">...</div>`).join("")}
+            <button class="btn" onclick="gerarSinais('${ativo}')">Atualizar Sinais</button>
+            <div id="info_${ativo.replace("/","")}" class="signal-info"></div>
+            <div id="melhor_${ativo.replace("/","")}" class="best">Melhor sinal sincronizado: ...</div>
+            <div id="timer_${ativo.replace("/","")}" class="signal-info"></div>
+            <div id="history_${ativo.replace("/","")}" class="history"></div>
+        `;
+        container.appendChild(card);
+    });
 }
 
-// Gera sinais por ativo
+// Gera sinais
 async function gerarSinais(ativo){
-  const idPrefix = ativo.replace("/","");
-  let infoText=""; let sinais=[]; let sinaisTF=[];
-  for(let i=0;i<tempos.length;i++){
-    const tempo=tempos[i];
-    const elem=document.getElementById(`${idPrefix}_${tempo}`);
-    try{
-      const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=${tempo}&outputsize=100&apikey=${API_KEY}`;
-      const res=await fetch(url);
-      const data=await res.json();
-      if(!data.values || data.values.length<26) continue;
+    const idPrefix=ativo.replace("/","");
+    let infoText=""; let sinais=[]; let sinaisTF=[];
+    for(let tempo of tempos){
+        const elem=document.getElementById(`${idPrefix}_${tempo}`);
+        try{
+            const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=${tempo}&outputsize=100&apikey=${API_KEY}`;
+            const res=await fetch(url); const data=await res.json();
+            if(!data.values || data.values.length<26) continue;
+            const candles=data.values.slice(-100); const closes=candles.map(c=>parseFloat(c.close));
+            const ind=combinarIndicadores(closes,candles);
+            elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
+            elem.innerText=`${ind.sinal} (${tempo})`;
+            const entrada=proximoCandle(tempo);
+            sinais.push({...ind,tempo,entrada}); sinaisTF.push(ind.sinal);
+            infoText += `${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6\n`;
+        }catch(err){ console.error("Erro gerar sinal:",err); }
+    }
+    document.getElementById(`info_${idPrefix}`).innerText = infoText;
 
-      const candles = data.values.slice(-100);
-      const closes = candles.map(c=>parseFloat(c.close));
-      const ind = combinarIndicadores(closes, candles);
-
-      elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
-      elem.innerText=`${ind.sinal} (${tempo})`;
-
-      const entrada = proximoCandle(tempo);
-      sinais.push({...ind,tempo,entrada});
-      sinaisTF.push(ind.sinal);
-
-      infoText += `${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6\n`;
-    }catch(err){ console.error("Erro gerar sinal:",err); }
-  }
-
-  document.getElementById(`info_${idPrefix}`).innerText = infoText;
-
-  // Sinal sincronizado
-  if(sinaisTF.length===tempos.length && sinaisTF.every(v=>v===sinaisTF[0])){
-    const melhor = sinais[0];
-    melhorSinais[ativo] = melhor;
-    document.getElementById(`melhor_${idPrefix}`).innerText=`Melhor sinal sincronizado: ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiabilidade ${melhor.confianca}/6)`;
-    tocarSom();
-
-    // Adiciona histórico colorido
-    const hist = document.getElementById(`history_${idPrefix}`);
-    const span = document.createElement("span");
-    span.className = melhor.sinal.toLowerCase();
-    span.innerText = `${new Date().toLocaleTimeString()} → ${melhor.sinal} (${melhor.tempo})\n`;
-    hist.prepend(span);
-  } else {
-    document.getElementById(`melhor_${idPrefix}`).innerText="Sem consenso entre os timeframes";
-    melhorSinais[ativo] = null;
-  }
+    // Sinal sincronizado
+    if(sinaisTF.length===tempos.length && sinaisTF.every(v=>v===sinaisTF[0])){
+        const melhor=sinais[0]; melhorSinais[ativo]=melhor;
+        document.getElementById(`melhor_${idPrefix}`).innerText=
+        `Melhor sinal sincronizado: ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiabilidade ${melhor.confianca}/6)`;
+        tocarSom();
+        enviarTelegram(`💹 ${ativo} → ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiança ${melhor.confianca}/6)`);
+        const hist=document.getElementById(`history_${idPrefix}`);
+        const span=document.createElement("span"); span.className=melhor.sinal.toLowerCase();
+        span.innerText=`${new Date().toLocaleTimeString()} → ${melhor.sinal} (${melhor.tempo})\n`; hist.prepend(span);
+    } else {
+        document.getElementById(`melhor_${idPrefix}`).innerText="Sem consenso entre os timeframes";
+        melhorSinais[ativo]=null;
+    }
 }
 
 // Atualiza timers
 function atualizarTimers(){
-  const agora=new Date();
-  ativos.forEach(ativo=>{
-    const idPrefix = ativo.replace("/","");
-    const melhor = melhorSinais[ativo];
-    if(!melhor) return;
-    const diff=Math.max(0, Math.floor((melhor.entrada.getTime()-agora.getTime())/1000));
-    const min=Math.floor(diff/60).toString().padStart(2,"0");
-    const seg=(diff%60).toString().padStart(2,"0");
-    document.getElementById(`timer_${idPrefix}`).innerText=`Entrada em: ${min}:${seg}`;
-  });
+    const agora=new Date();
+    ativos.forEach(ativo=>{
+        const idPrefix=ativo.replace("/","");
+        const melhor=melhorSinais[ativo];
+        if(!melhor) return;
+        const diff=Math.max(0, Math.floor((melhor.entrada.getTime()-agora.getTime())/1000));
+        const min=Math.floor(diff/60).toString().padStart(2,"0");
+        const seg=(diff%60).toString().padStart(2,"0");
+        document.getElementById(`timer_${idPrefix}`).innerText=`Entrada em: ${min}:${seg}`;
+    });
 }
 
 // Inicialização
-criarCards();
-ativos.forEach(a=>gerarSinais(a));
-setInterval(()=>{
-  ativos.forEach(a=>gerarSinais(a));
-}, intervaloAtualizacao);
+criarCards(); ativos.forEach(a=>gerarSinais(a));
+setInterval(()=>{ ativos.forEach(a=>gerarSinais(a)); }, intervaloAtualizacao);
 setInterval(atualizarTimers,1000);
 
 </script>
