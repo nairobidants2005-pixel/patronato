@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<title>Sala de Sinais Inteligente - Sinais Rápidos</title>
+<title>Sala de Sinais Inteligente - Tempo Real</title>
 <style>
 body { background:#0f172a; color:white; font-family:Arial, sans-serif; text-align:center; }
 h1 { margin:20px; }
@@ -21,17 +21,15 @@ h1 { margin:20px; }
 </head>
 <body>
 
-<h1>🔥 Sala de Sinais Inteligente - Sinais Rápidos</h1>
+<h1>🔥 Sala de Sinais Inteligente - Tempo Real</h1>
 
 <div id="cards-container"></div>
 
 <script>
-const API_KEY = "b7a8442395824a299190dc6f20845d6a"; // sua chave
-const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";       // token do bot
-const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";      // seu chat id
-const tempos = ["30s"];  // sinal rápido
+const API_KEY = "b7a8442395824a299190dc6f20845d6a";
+const TELEGRAM_BOT_TOKEN = "SEU_TOKEN_AQUI";
+const TELEGRAM_CHAT_ID = "SEU_CHAT_ID_AQUI";
 const ativos = ["EUR/USD","GBP/USD","USD/JPY"];
-const intervaloAtualizacao = 15000; // 15s
 const melhorSinais = {};
 
 // Som de alerta
@@ -74,15 +72,6 @@ function combinarIndicadores(closes,candles){
     return { sinal:sinalFinal, media:media.toFixed(4), rsi:r.toFixed(2), macd:m.toFixed(4), bbUpper:bb.upper.toFixed(4), bbLower:bb.lower.toFixed(4), adx:a.toFixed(2), confianca:Math.min(Math.abs(score),6) };
 }
 
-// Próximo candle
-function proximoCandle(tempo){
-    const agora=new Date();
-    let minutos=agora.getMinutes();
-    if(tempo==="30s") minutos+=0.5; // aproximado
-    const entrada=new Date(agora); entrada.setMinutes(Math.floor(minutos)); entrada.setSeconds(0); entrada.setMilliseconds(0);
-    return entrada;
-}
-
 // Criar cards
 function criarCards(){
     const container=document.getElementById("cards-container");
@@ -92,72 +81,60 @@ function criarCards(){
         card.className="card"; card.id=`card_${ativo.replace("/","")}`;
         card.innerHTML=`
             <h3>${ativo}</h3>
-            ${tempos.map(t=>`<div id="${ativo.replace("/","")}_${t}" class="sinal">...</div>`).join("")}
-            <button class="btn" onclick="gerarSinais('${ativo}')">Atualizar Sinais</button>
+            <div id="${ativo.replace("/","")}_1min" class="sinal">...</div>
             <div id="info_${ativo.replace("/","")}" class="signal-info"></div>
-            <div id="melhor_${ativo.replace("/","")}" class="best">Melhor sinal: ...</div>
-            <div id="timer_${ativo.replace("/","")}" class="signal-info"></div>
+            <div id="melhor_${ativo.replace("/","")}" class="best">Sinal: ...</div>
             <div id="history_${ativo.replace("/","")}" class="history"></div>
         `;
         container.appendChild(card);
     });
 }
 
-// Gera sinais
-async function gerarSinais(ativo){
+// Gera sinais em tempo real
+async function gerarSinaisTempoReal(ativo){
     const idPrefix=ativo.replace("/","");
-    let infoText=""; let sinais=[]; let sinaisTF=[];
-    for(let tempo of tempos){
-        const elem=document.getElementById(`${idPrefix}_${tempo}`);
-        try{
-            const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=${tempo}&outputsize=100&apikey=${API_KEY}`;
-            const res=await fetch(url); const data=await res.json();
-            if(!data.values || data.values.length<26) continue;
-            const candles=data.values.slice(-100); const closes=candles.map(c=>parseFloat(c.close));
-            const ind=combinarIndicadores(closes,candles);
-            elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
-            elem.innerText=`${ind.sinal} (${tempo})`;
-            const entrada=proximoCandle(tempo);
-            sinais.push({...ind,tempo,entrada}); sinaisTF.push(ind.sinal);
-            infoText += `${tempo.toUpperCase()} → ${ind.sinal} às ${entrada.getHours().toString().padStart(2,"0")}:${entrada.getMinutes().toString().padStart(2,"0")} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6\n`;
-        }catch(err){ console.error("Erro gerar sinal:",err); }
-    }
-    document.getElementById(`info_${idPrefix}`).innerText = infoText;
+    try{
+        const url=`https://api.twelvedata.com/time_series?symbol=${ativo}&interval=1min&outputsize=100&apikey=${API_KEY}`;
+        const res=await fetch(url); const data=await res.json();
+        if(!data.values || data.values.length<26) return;
+        const candles=data.values.slice(-100);
+        const closes=candles.map(c=>parseFloat(c.close));
+        const ind=combinarIndicadores(closes,candles);
 
-    // Sempre pega primeiro sinal como "melhor"
-    if(sinais.length>0){
-        const melhor = sinais[0];
-        melhorSinais[ativo] = melhor;
-        document.getElementById(`melhor_${idPrefix}`).innerText =
-            `Sinal rápido: ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiança ${melhor.confianca}/6)`;
-        tocarSom();
-        enviarTelegram(`💹 ${ativo} → ${melhor.sinal} às ${melhor.entrada.getHours().toString().padStart(2,"0")}:${melhor.entrada.getMinutes().toString().padStart(2,"0")} (Confiança ${melhor.confianca}/6)`);
+        // Atualiza card
+        const elem=document.getElementById(`${idPrefix}_1min`);
+        elem.className="sinal "+(ind.sinal==="CALL"?"call":"put");
+        elem.innerText=`${ind.sinal} (1min)`;
+
+        // Sinal
+        const agora=new Date();
+        const entrada=new Date(agora); entrada.setSeconds(0); entrada.setMilliseconds(0); entrada.setMinutes(entrada.getMinutes()+1);
+        const melhor = melhorSinais[ativo];
+        // Só toca som e envia Telegram se mudou
+        if(!melhor || melhor.sinal !== ind.sinal){
+            tocarSom();
+            enviarTelegram(`💹 ${ativo} → ${ind.sinal} (Tempo Real)`);
+        }
+        melhorSinais[ativo]={...ind,tempo:"1min",entrada};
+
+        // Atualiza info
+        document.getElementById(`info_${idPrefix}`).innerText =
+            `1MIN → ${ind.sinal} | SMA:${ind.media} RSI:${ind.rsi} MACD:${ind.macd} BB:${ind.bbLower}-${ind.bbUpper} ADX:${ind.adx} | Conf:${ind.confianca}/6`;
+
+        // Histórico
         const hist=document.getElementById(`history_${idPrefix}`);
-        const span=document.createElement("span"); span.className=melhor.sinal.toLowerCase();
-        span.innerText=`${new Date().toLocaleTimeString()} → ${melhor.sinal} (${melhor.tempo})\n`; hist.prepend(span);
-    }
-}
+        const span=document.createElement("span"); span.className=ind.sinal.toLowerCase();
+        span.innerText=`${new Date().toLocaleTimeString()} → ${ind.sinal} (1min)\n`; hist.prepend(span);
 
-// Atualiza timers
-function atualizarTimers(){
-    const agora=new Date();
-    ativos.forEach(ativo=>{
-        const idPrefix=ativo.replace("/","");
-        const melhor=melhorSinais[ativo];
-        if(!melhor) return;
-        const diff=Math.max(0, Math.floor((melhor.entrada.getTime()-agora.getTime())/1000));
-        const min=Math.floor(diff/60).toString().padStart(2,"0");
-        const seg=(diff%60).toString().padStart(2,"0");
-        document.getElementById(`timer_${idPrefix}`).innerText=`Entrada em: ${min}:${seg}`;
-    });
+        // Melhor sinal
+        document.getElementById(`melhor_${idPrefix}`).innerText=`Sinal: ${ind.sinal}`;
+    }catch(err){ console.error(err); }
 }
 
 // Inicialização
 criarCards();
-ativos.forEach(a=>gerarSinais(a));
-setInterval(()=>{ ativos.forEach(a=>gerarSinais(a)); }, intervaloAtualizacao);
-setInterval(atualizarTimers,1000);
-
+ativos.forEach(a=>gerarSinaisTempoReal(a));
+setInterval(()=>{ ativos.forEach(a=>gerarSinaisTempoReal(a)); },1000);
 </script>
 </body>
 </html>
